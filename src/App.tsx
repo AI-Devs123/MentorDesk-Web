@@ -1,16 +1,41 @@
 import React, { useState, useRef } from 'react';
 
-// 对应后端 SSE 推送的数据帧结构
+// ==================== 类型定义 ====================
+
+// 标准流式数据帧
 interface StreamChunk {
   timestamp: number;
   stage: string;
   content: string;
 }
 
+// 安全事件：RBAC 403 / 沙箱越界
+interface SecurityEvent {
+  type: 'SECURITY_VIOLATION' | 'PERMISSION_DENIED' | 'SANDBOX_BREACH';
+  agent: string;
+  reason: string;
+  level: 'WARNING' | 'CRITICAL';
+  timestamp: number;
+  details?: string;
+}
+
+// 错误事件
+interface ErrorEvent {
+  type: 'ERROR';
+  code: string;
+  message: string;
+  timestamp: number;
+}
+
 export const App: React.FC = () => {
+  // ==================== 状态管理 ====================
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [prompt, setPrompt] = useState<string>('扫描全库AST结构并构建依赖拓扑');
+  
+  // 安全事件状态
+  const [securityAlerts, setSecurityAlerts] = useState<SecurityEvent[]>([]);
+  
   const [diagnostics, setDiagnostics] = useState<{
     taskId?: string;
     chunksReceived: number;
@@ -22,12 +47,61 @@ export const App: React.FC = () => {
   // 用于保存当前流的 AbortController 实例引用，方便随时主动中断
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // ==================== 事件处理与日志 ====================
+
+  // 判断事件类型并处理
+  const processStreamEvent = (payload: any): boolean => {
+    // 检查是否为安全事件
+    if (payload.type === 'SECURITY_VIOLATION' || payload.type === 'PERMISSION_DENIED' || payload.type === 'SANDBOX_BREACH') {
+      const securityEvent: SecurityEvent = {
+        type: payload.type,
+        agent: payload.agent || 'Unknown',
+        reason: payload.message || payload.reason || '未知原因',
+        level: payload.level || 'CRITICAL',
+        timestamp: payload.timestamp || Date.now(),
+        details: payload.details || payload.stack,
+      };
+      
+      // 添加到安全告警列表
+      setSecurityAlerts(prev => [...prev, securityEvent]);
+      
+      // 记录到日志（带视觉强调）
+      const icon = securityEvent.level === 'CRITICAL' ? '🚨' : '⚠️';
+      const logEntry = `${icon} [SecurityGuard 拦截] Agent: ${securityEvent.agent} | 原因: ${securityEvent.reason}`;
+      setLogs(prev => [...prev, logEntry]);
+      
+      if (securityEvent.details) {
+        setLogs(prev => [...prev, `   详情: ${securityEvent.details}`]);
+      }
+      
+      return true; // 表示已处理安全事件
+    }
+    
+    // 检查是否为错误事件
+    if (payload.type === 'ERROR') {
+      const errorEvent: ErrorEvent = {
+        type: 'ERROR',
+        code: payload.code || 'UNKNOWN',
+        message: payload.message || '未知错误',
+        timestamp: payload.timestamp || Date.now(),
+      };
+      
+      const logEntry = `❌ [业务异常] Code: ${errorEvent.code} | Message: ${errorEvent.message}`;
+      setLogs(prev => [...prev, logEntry]);
+      
+      return true; // 表示已处理错误事件
+    }
+    
+    return false; // 不是特殊事件
+  };
+
   // 核心：使用 fetch + ReadableStream 消费 SSE 流
   const handleStartStream = async () => {
     if (!prompt.trim()) return;
 
     setIsRunning(true);
     setLogs([]); // 清空上一轮日志
+    setSecurityAlerts([]); // 清空安全告警
 
     const startTime = Date.now();
     const taskId = `TASK-${startTime}`;
@@ -62,7 +136,32 @@ export const App: React.FC = () => {
       );
 
       if (!response.ok) {
-        throw new Error(`HTTP 异常: ${response.status} ${response.statusText}`);
+        // HTTP 错误：可能是 403 Forbidden / 401 Unauthorized
+        if (response.status === 403) {
+          setLogs(prev => [...prev, `🚨 [RBAC] 访问被拒绝 (HTTP 403)`]);
+          setLogs(prev => [...prev, `   原因: 当前用户无权执行此任务`]);
+          setSecurityAlerts(prev => [...prev, {
+            type: 'PERMISSION_DENIED',
+            agent: 'Gateway',
+            reason: '用户权限不足',
+            level: 'CRITICAL',
+            timestamp: Date.now(),
+            details: `HTTP ${response.status}: ${response.statusText}`,
+          }]);
+        } else if (response.status === 401) {
+          setLogs(prev => [...prev, `🚨 [AUTH] 认证失败 (HTTP 401)`]);
+          setSecurityAlerts(prev => [...prev, {
+            type: 'PERMISSION_DENIED',
+            agent: 'Gateway',
+            reason: '用户未认证',
+            level: 'CRITICAL',
+            timestamp: Date.now(),
+            details: `HTTP ${response.status}: ${response.statusText}`,
+          }]);
+        } else {
+          throw new Error(`HTTP 异常: ${response.status} ${response.statusText}`);
+        }
+        return;
       }
 
       setLogs(prev => [...prev, `✅ [GATEWAY] SSE 连接已建立 (HTTP 200)`]);
@@ -88,6 +187,11 @@ export const App: React.FC = () => {
           const elapsed = Date.now() - startTime;
           setLogs(prev => [...prev, '🏁 [COMPLETED] 后端任务流式推送完毕']);
           setLogs(prev => [...prev, `📊 [STATS] 总耗时: ${elapsed}ms | 共收: ${chunkCount} 数据帧 | ${totalBytes} 字节`]);
+          
+          // 检查是否有安全告警
+          if (securityAlerts.length > 0) {
+            setLogs(prev => [...prev, `⚠️ [汇总] 本次执行中检测到 ${securityAlerts.length} 个安全事件`]);
+          }
           break;
         }
 
@@ -111,12 +215,20 @@ export const App: React.FC = () => {
           if (trimmedLine.startsWith('data:')) {
             const rawJson = trimmedLine.replace(/^data:\s*/, '');
             try {
-              const payload: StreamChunk = JSON.parse(rawJson);
-              const timeStr = new Date(payload.timestamp).toLocaleTimeString();
-              const formattedLog = `[${timeStr}] [${payload.stage}] ${payload.content}`;
-
-              // 追加日志到页面
-              setLogs(prev => [...prev, formattedLog]);
+              const payload = JSON.parse(rawJson);
+              
+              // 尝试处理为特殊事件（安全/错误）
+              if (processStreamEvent(payload)) {
+                // 已作为特殊事件处理，跳过标准处理
+                continue;
+              }
+              
+              // 作为标准流式数据帧处理
+              if (payload.timestamp && payload.stage && payload.content !== undefined) {
+                const timeStr = new Date(payload.timestamp).toLocaleTimeString();
+                const formattedLog = `[${timeStr}] [${payload.stage}] ${payload.content}`;
+                setLogs(prev => [...prev, formattedLog]);
+              }
               
               // 更新诊断信息
               setDiagnostics(prev => ({
@@ -161,6 +273,43 @@ export const App: React.FC = () => {
     }
   };
 
+  // ==================== UI 组件 ====================
+
+  // 安全告警徽章组件
+  const SecurityAlertBadge = ({ alert }: { alert: SecurityEvent }) => {
+    const borderColor = alert.level === 'CRITICAL' ? 'border-red-600' : 'border-yellow-600';
+    const bgColor = alert.level === 'CRITICAL' ? 'bg-red-950' : 'bg-yellow-950';
+    const textColor = alert.level === 'CRITICAL' ? 'text-red-200' : 'text-yellow-200';
+    const icon = alert.level === 'CRITICAL' ? '🚨' : '⚠️';
+
+    return (
+      <div className={`border-2 ${borderColor} ${bgColor} rounded-lg p-4 mb-4`}>
+        <div className={`${textColor} text-sm font-semibold mb-2`}>
+          {icon} SecurityGuard 拦截
+        </div>
+        <div className="space-y-1">
+          <div className={`${textColor} text-xs`}>
+            <span className="font-mono">Agent:</span> {alert.agent}
+          </div>
+          <div className={`${textColor} text-xs`}>
+            <span className="font-mono">原因:</span> {alert.reason}
+          </div>
+          <div className={`${textColor} text-xs`}>
+            <span className="font-mono">级别:</span> {alert.level}
+          </div>
+          {alert.details && (
+            <div className={`${textColor} text-xs`}>
+              <span className="font-mono">详情:</span> {alert.details}
+            </div>
+          )}
+          <div className={`${textColor} text-xs opacity-70`}>
+            {new Date(alert.timestamp).toLocaleTimeString()}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8 font-mono">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -175,6 +324,18 @@ export const App: React.FC = () => {
             <div>📈 数据帧: {diagnostics.chunksReceived} | 字节数: {diagnostics.bytesReceived}</div>
           </div>
         </header>
+
+        {/* 安全告警面板 */}
+        {securityAlerts.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-red-400">
+              🔐 安全事件汇总 ({securityAlerts.length})
+            </div>
+            {securityAlerts.map((alert, idx) => (
+              <SecurityAlertBadge key={idx} alert={alert} />
+            ))}
+          </div>
+        )}
 
         {/* 输入框与操作按钮 */}
         <div className="space-y-4">
