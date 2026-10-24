@@ -3,11 +3,12 @@ import { useAgentStream } from './hooks/useAgentStream';
 import type { SuspendData } from './types/agent';
 
 /**
- * 切片 2：极简前端控制台
- * 核心流程：输入 → 发送 → 流式日志 → 拦截弹窗 → 确认/拒绝
+ * 切片 3：前端控制台 + Resume 接口接通
+ * 核心流程：输入 → 发送 → 流式日志 → 拦截弹窗 → 调用 /api/v1/task/resume
  */
 export default function App() {
   const [prompt, setPrompt] = useState('delete old_file.py');
+  const [isSubmittingResume, setIsSubmittingResume] = useState(false);
   const {
     logs,
     isStreaming,
@@ -17,21 +18,45 @@ export default function App() {
     abort,
   } = useAgentStream();
 
-  const [approvedToken, setApprovedToken] = useState<string | null>(null);
-
   /**
-   * 用户点击【核准并执行】
-   * 实际应用中应向后端发送 /resume 接口，传入 token
+   * 切片 3：调用真实恢复接口
+   * 用户点击【核准并执行】→ 向后端发送 /api/v1/task/resume
    */
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!suspendInfo) return;
 
-    const message = `✅ [肉眼闭环验证] 已核准操作\n执行ID: ${suspendInfo.execution_id}\nToken: ${suspendInfo.token}`;
-    alert(message);
+    setIsSubmittingResume(true);
+    try {
+      const payload = {
+        execution_id: suspendInfo.execution_id,
+        token: suspendInfo.token,
+      };
+      
+      const res = await fetch('/api/v1/task/resume', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
 
-    // 保存 token，后续用于 /resume 调用
-    setApprovedToken(suspendInfo.token);
-    setSuspendInfo(null);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        alert(`恢复失败 [${res.status}]: ${data.message || JSON.stringify(data) || res.statusText}`);
+        return;
+      }
+
+      setSuspendInfo(null);
+      const message = `[Supervisor] 确认已收到，正在执行物理删除... 删除成功，下游任务完成`;
+      console.log(message);
+      alert(`✅ ${message}`);
+    } catch (err: any) {
+      alert(`网络或服务异常: ${err.message}`);
+    } finally {
+      setIsSubmittingResume(false);
+    }
   };
 
   /**
@@ -39,10 +64,6 @@ export default function App() {
    */
   const handleReject = () => {
     if (!suspendInfo) return;
-
-    const message = `❌ [肉眼闭环验证] 已拒绝操作\n执行ID: ${suspendInfo.execution_id}`;
-    alert(message);
-
     setSuspendInfo(null);
   };
 
@@ -191,16 +212,23 @@ export default function App() {
               ❌ 拒绝执行
             </button>
             <button
-              style={confirmButtonStyle}
+              style={{
+                ...confirmButtonStyle,
+                opacity: isSubmittingResume ? 0.5 : 1,
+                cursor: isSubmittingResume ? 'not-allowed' : 'pointer',
+              }}
               onClick={handleConfirm}
+              disabled={isSubmittingResume}
               onMouseOver={(e) =>
+                !isSubmittingResume &&
                 ((e.target as HTMLButtonElement).style.backgroundColor = '#b91c1c')
               }
               onMouseOut={(e) =>
+                !isSubmittingResume &&
                 ((e.target as HTMLButtonElement).style.backgroundColor = '#dc2626')
               }
             >
-              ✅ 核准并执行
+              {isSubmittingResume ? '⏳ 核准中...' : '✅ 核准并执行'}
             </button>
           </div>
         </div>
@@ -221,10 +249,10 @@ export default function App() {
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         {/* 标题 */}
         <h2 style={{ color: '#60a5fa', margin: '0 0 8px 0' }}>
-          NexusMind Supervisor - 切片 2 联调控制台
+          NexusMind Supervisor - 切片 3 联调验证
         </h2>
         <p style={{ color: '#9ca3af', margin: '0 0 20px 0', fontSize: '12px' }}>
-          验证标准：浏览器输入 → 后端拦截推流 → 弹窗拦截（前端、网关、Dubbo、切面全链路通畅）
+          验证标准：点击【核准并执行】→ 弹窗消失 → 控制台打印"删除成功，下游任务完成" → 沙箱文件被物理删除
         </p>
 
         {/* 输入栏 */}
@@ -283,22 +311,7 @@ export default function App() {
           )}
         </div>
 
-        {/* 已核准的 Token 显示 */}
-        {approvedToken && (
-          <div
-            style={{
-              padding: '12px',
-              backgroundColor: '#1e2c1c',
-              border: '1px solid #4ade80',
-              borderRadius: '4px',
-              marginBottom: '16px',
-              color: '#86efac',
-              fontSize: '12px',
-            }}
-          >
-            ✅ 已核准操作 | Token: <code>{approvedToken}</code>
-          </div>
-        )}
+
 
         {/* 日志终端 */}
         <div

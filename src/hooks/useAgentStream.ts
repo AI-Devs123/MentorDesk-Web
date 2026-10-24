@@ -43,22 +43,31 @@ export function useAgentStream() {
         const chunk: StreamEventChunk = JSON.parse(rawJson);
         const { stage, content, taskId } = chunk;
 
-        // 【核心】识别挂起事件
-        if (stage === 'SUSPEND_FOR_CONFIRMATION') {
+        if (stage === 'SUSPEND_FOR_CONFIRMATION' || 
+            stage === 'LAYERS_CONFIRMATION_REQUIRED' || 
+            stage === 'LAYER3_CONFIRMATION_REQUIRED') {
           try {
-            const payload: SuspendData = JSON.parse(content);
+            const payload: SuspendData = {
+              execution_id: chunk.execution_id || taskId,
+              token: chunk.token || '',
+              operation_type: chunk.operation_type || 'UNKNOWN',
+              risk_level: (chunk.risk_level as any) || 'MEDIUM',
+              description: chunk.description || content || '破坏性操作',
+              affected_files: chunk.affected_files || [],
+              expires_at: chunk.expires_at || new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+            };
+            
             setSuspendInfo(payload);
             addLog(
-              `⚠️ 拦截到破坏性操作 | 任务ID: ${taskId} | 受影响文件: ${(payload.affected_files || []).join(', ')}`,
-              'SUSPEND_FOR_CONFIRMATION'
+              `⚠️ 拦截到破坏性操作 | 任务ID: ${payload.execution_id} | Token: ${payload.token}`,
+              stage
             );
           } catch (e) {
-            addLog(`[WARN] 挂起事件 content 不是有效 JSON`, 'SUSPEND_FOR_CONFIRMATION');
+            addLog(`[WARN] 挂起事件解析失败: ${e}`, stage);
           }
           return;
         }
 
-        // 普通进度日志
         addLog(content, stage);
       } catch (e) {
         console.error('[SSE Parse Error]', rawJson, e);
