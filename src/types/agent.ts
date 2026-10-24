@@ -16,8 +16,15 @@ export interface SuspendData {
  * 标准流式数据帧
  */
 export interface StreamEventChunk {
-  timestamp: number;
+  timestamp?: number;
   stage: string;
-  taskId: string;
+  taskId?: string;
   content: string;
+  execution_id?: string;
+  token?: string;
+  operation_type?: string;
+  risk_level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  description?: string;
+  affected_files?: string[];
+  expires_at?: string;
 }

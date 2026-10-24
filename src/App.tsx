@@ -15,7 +15,7 @@ interface LogItem {
 
 export default function App() {
   const { currentUser, isLoggedIn, isLoading, logout } = useAuth();
-  const [prompt, setPrompt] = useState('cleanup old_file');
+  const [prompt, setPrompt] = useState('delete old_file.py');
   const [customLogs, setCustomLogs] = useState<LogItem[]>([]);
 
   const { logs, isStreaming, suspendInfo, setSuspendInfo, startStream } = useAgentStream();

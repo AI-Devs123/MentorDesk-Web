@@ -133,7 +133,12 @@ export function useAgentStream() {
           throw new Error('Token 未找到，请重新登录');
         }
 
+        addLog(`🔑 Token: ${token.substring(0, 20)}...`, 'AUTH');
+
         const url = `/api/v1/agent/stream?prompt=${encodeURIComponent(prompt)}&agent=Supervisor&agentRole=supervisor`;
+        addLog(`📡 请求 URL: ${url}`, 'REQUEST');
+        addLog(`🔐 请求头: Authorization: Bearer ${token.substring(0, 20)}...`, 'REQUEST');
+
         const response = await fetch(url, {
           method: 'GET',
           headers: { 
@@ -144,7 +149,11 @@ export function useAgentStream() {
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const errorText = await response.text();
+          const errorMsg = response.status === 403 
+            ? `认证失败 (403): 请检查 Token 是否过期或角色权限不足`
+            : `HTTP ${response.status}: ${response.statusText}`;
+          throw new Error(errorMsg);
         }
 
         addLog('✅ SSE 连接已建立', 'GATEWAY');
