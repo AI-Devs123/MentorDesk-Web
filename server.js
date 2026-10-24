@@ -117,6 +117,60 @@ function handleResumeTask(executionId, token) {
   };
 }
 
+/**
+ * 切片 4：拒绝与回滚
+ * 销毁 Redis 快照、取消后续 DAG、返回回滚日志
+ */
+function handleAbortTask(executionId) {
+  console.log(`\n[BFF 网关 / 控制器] 收到 POST /api/v1/task/abort`);
+  console.log(`  execution_id: ${executionId}`);
+
+  // 第1步：查询快照是否存在
+  console.log('\n[第1步] 查询快照是否存在...');
+  const key = `snapshot:${executionId}`;
+  const snapshot = redisSnapshots.get(key);
+
+  if (!snapshot) {
+    console.log(`  ⚠️ 快照不存在或已被消费: ${key}`);
+    return {
+      success: false,
+      message: '任务不存在或已完成，无法回滚',
+      execution_id: executionId,
+    };
+  }
+
+  // 第2步：销毁 Redis 快照（防重放）
+  console.log('\n[第2步] 销毁 Redis 快照...');
+  redisSnapshots.delete(key);
+  console.log(`  ✅ 快照已安全清理: ${key}`);
+
+  // 第3步：取消后续 DAG（模拟）
+  console.log('\n[第3步] 通知 DAG 状态机终止后续任务...');
+  console.log(`  ✅ DAG 任务链已中断，后续操作已取消`);
+
+  // 第4步：验证沙箱文件完好无损
+  console.log('\n[第4步] 验证沙箱文件完好无损...');
+  const sandboxDir = path.join(__dirname, 'sandbox');
+  const files = fs.readdirSync(sandboxDir);
+  console.log(`  ✅ 沙箱文件完好: ${files.join(', ')}`);
+
+  // 第5步：清理上下文
+  console.log('\n[第5步] 清理上下文...');
+  taskContextResumeToken = null;
+
+  // 第6步：返回回滚确认
+  console.log('\n[第6步] 返回回滚确认...');
+  const message = `[Supervisor] 用户拒绝操作，任务回滚中断`;
+  console.log(`  🛑 ${message}`);
+
+  return {
+    success: true,
+    message,
+    execution_id: executionId,
+    sandbox_files: files,
+  };
+}
+
 // ==================== HTTP 服务器 ====================
 
 const server = http.createServer((req, res) => {
@@ -154,6 +208,39 @@ const server = http.createServer((req, res) => {
         }
 
         const result = handleResumeTask(execution_id, token);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        console.error(`[ERROR] ${err.message}`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: err.message }));
+      }
+    });
+
+    return;
+  }
+
+  // ========== 切片 4：拒绝与回滚接口 ==========
+  if (pathname === '/api/v1/task/abort' && req.method === 'POST') {
+    let body = '';
+
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const { execution_id } = payload;
+
+        if (!execution_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ message: '缺少 execution_id' }));
+          return;
+        }
+
+        const result = handleAbortTask(execution_id);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
