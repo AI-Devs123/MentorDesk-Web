@@ -27,11 +27,52 @@ interface ErrorEvent {
   timestamp: number;
 }
 
+// ==================== Agent 角色定义 ====================
+type AgentRole = 'CODE_AGENT' | 'JOURNAL_AGENT' | 'ADMIN_AGENT' | 'GUEST_AGENT';
+
+interface RoleConfig {
+  label: string;
+  description: string;
+  color: string;
+  permissions: string[];
+}
+
+const AGENT_ROLES: Record<AgentRole, RoleConfig> = {
+  CODE_AGENT: {
+    label: 'CodeAgent',
+    description: '代码分析与编辑',
+    color: 'bg-blue-900 border-blue-600',
+    permissions: ['read:code', 'write:code', 'analyze:code'],
+  },
+  JOURNAL_AGENT: {
+    label: 'JournalAgent',
+    description: '日记与私密信息管理',
+    color: 'bg-purple-900 border-purple-600',
+    permissions: ['read:journal', 'write:journal'],
+  },
+  ADMIN_AGENT: {
+    label: 'AdminAgent',
+    description: '系统管理员（全权限）',
+    color: 'bg-red-900 border-red-600',
+    permissions: ['*:*'],
+  },
+  GUEST_AGENT: {
+    label: 'GuestAgent',
+    description: '访客（只读权限）',
+    color: 'bg-slate-800 border-slate-600',
+    permissions: ['read:public'],
+  },
+};
+
 export const App: React.FC = () => {
   // ==================== 状态管理 ====================
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [prompt, setPrompt] = useState<string>('扫描全库AST结构并构建依赖拓扑');
+  
+  // 请求上下文：Agent 角色标签
+  const [selectedAgent, setSelectedAgent] = useState<AgentRole>('CODE_AGENT');
+  const [enableContextHeader, setEnableContextHeader] = useState<boolean>(true);
   
   // 安全事件状态
   const [securityAlerts, setSecurityAlerts] = useState<SecurityEvent[]>([]);
@@ -42,6 +83,7 @@ export const App: React.FC = () => {
     bytesReceived: number;
     startTime?: number;
     lastChunkTime?: number;
+    requestHeaders?: Record<string, string>;
   }>({ chunksReceived: 0, bytesReceived: 0 });
 
   // 用于保存当前流的 AbortController 实例引用，方便随时主动中断
@@ -106,12 +148,25 @@ export const App: React.FC = () => {
     const startTime = Date.now();
     const taskId = `TASK-${startTime}`;
     
+    // 构建请求头
+    const headers: Record<string, string> = {
+      'Accept': 'text/event-stream',
+    };
+
+    // 条件性添加 Agent 上下文头
+    if (enableContextHeader) {
+      headers['X-Agent-Context'] = selectedAgent;
+    }
+
+    const requestHeadersDisplay = { ...headers };
+    
     setDiagnostics({
       taskId,
       chunksReceived: 0,
       bytesReceived: 0,
       startTime,
-      lastChunkTime: startTime
+      lastChunkTime: startTime,
+      requestHeaders: requestHeadersDisplay,
     });
 
     // 1. 初始化中断控制器
@@ -122,15 +177,21 @@ export const App: React.FC = () => {
       setLogs(prev => [...prev, `📡 [GATEWAY] 正在建立 SSE 连接到网关...`]);
       setLogs(prev => [...prev, `   Task ID: ${taskId}`]);
       setLogs(prev => [...prev, `   Prompt: ${prompt}`]);
+      
+      // 显示请求上下文
+      if (enableContextHeader) {
+        setLogs(prev => [...prev, `   � [Context] Agent: ${selectedAgent}`]);
+        setLogs(prev => [...prev, `   📝 [Header] X-Agent-Context: ${selectedAgent}`]);
+      } else {
+        setLogs(prev => [...prev, `   ⚪ [Context] 无 Agent 标签（以网关默认身份执行）`]);
+      }
 
       // 2. 发起请求，明确接收类型为 text/event-stream，并绑定 signal
       const response = await fetch(
         `/api/v1/agent/stream?prompt=${encodeURIComponent(prompt)}&agent=Supervisor`,
         {
           method: 'GET',
-          headers: {
-            'Accept': 'text/event-stream',
-          },
+          headers,
           signal: controller.signal, // 挂载中断信号
         }
       );
@@ -139,17 +200,17 @@ export const App: React.FC = () => {
         // HTTP 错误：可能是 403 Forbidden / 401 Unauthorized
         if (response.status === 403) {
           setLogs(prev => [...prev, `🚨 [RBAC] 访问被拒绝 (HTTP 403)`]);
-          setLogs(prev => [...prev, `   原因: 当前用户无权执行此任务`]);
+          setLogs(prev => [...prev, `   原因: ${selectedAgent} 无权执行此任务`]);
           setSecurityAlerts(prev => [...prev, {
             type: 'PERMISSION_DENIED',
-            agent: 'Gateway',
-            reason: '用户权限不足',
+            agent: selectedAgent,
+            reason: `用户权限不足`,
             level: 'CRITICAL',
             timestamp: Date.now(),
-            details: `HTTP ${response.status}: ${response.statusText}`,
+            details: `HTTP ${response.status}: ${response.statusText} | Agent Context: ${selectedAgent}`,
           }]);
         } else if (response.status === 401) {
-          setLogs(prev => [...prev, `🚨 [AUTH] 认证失败 (HTTP 401)`]);
+          setLogs(prev => [...prev, `� [AUTH] 认证失败 (HTTP 401)`]);
           setSecurityAlerts(prev => [...prev, {
             type: 'PERMISSION_DENIED',
             agent: 'Gateway',
@@ -165,7 +226,7 @@ export const App: React.FC = () => {
       }
 
       setLogs(prev => [...prev, `✅ [GATEWAY] SSE 连接已建立 (HTTP 200)`]);
-      setLogs(prev => [...prev, `🔗 [SUPERVISOR] 等待后端 Triple 流式推送...`]);
+      setLogs(prev => [...prev, `� [SUPERVISOR] 等待后端 Triple 流式推送...`]);
 
       // 3. 校验并获取 body 的底层 ReadableStream 阅读器
       if (!response.body) {
@@ -275,6 +336,66 @@ export const App: React.FC = () => {
 
   // ==================== UI 组件 ====================
 
+  // Agent 角色选择器组件
+  const AgentContextSelector = () => {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-slate-300">🔐 请求上下文标签</label>
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            <input
+              type="checkbox"
+              checked={enableContextHeader}
+              onChange={(e) => setEnableContextHeader(e.target.checked)}
+              disabled={isRunning}
+              className="w-4 h-4 cursor-pointer"
+            />
+            启用 X-Agent-Context Header
+          </label>
+        </div>
+
+        {/* Agent 角色按钮组 */}
+        <div className="grid grid-cols-2 gap-2">
+          {(Object.keys(AGENT_ROLES) as AgentRole[]).map(role => {
+            const config = AGENT_ROLES[role];
+            const isSelected = selectedAgent === role;
+            return (
+              <button
+                key={role}
+                onClick={() => setSelectedAgent(role)}
+                disabled={isRunning || !enableContextHeader}
+                className={`p-3 rounded-lg border-2 transition text-left ${
+                  isSelected
+                    ? `${config.color} text-white font-semibold`
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <div className="font-mono text-sm">{config.label}</div>
+                <div className="text-xs opacity-70 mt-1">{config.description}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 权限提示 */}
+        {enableContextHeader && (
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+            <div className="text-xs font-semibold text-slate-300 mb-2">
+              📋 {selectedAgent} 权限清单
+            </div>
+            <div className="space-y-1">
+              {AGENT_ROLES[selectedAgent].permissions.map((perm, idx) => (
+                <div key={idx} className="text-xs text-slate-400">
+                  ✓ {perm}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // 安全告警徽章组件
   const SecurityAlertBadge = ({ alert }: { alert: SecurityEvent }) => {
     const borderColor = alert.level === 'CRITICAL' ? 'border-red-600' : 'border-yellow-600';
@@ -322,8 +443,23 @@ export const App: React.FC = () => {
           <div className="mt-2 text-xs text-slate-500 space-y-1">
             <div>📊 Task ID: {diagnostics.taskId || '-'}</div>
             <div>📈 数据帧: {diagnostics.chunksReceived} | 字节数: {diagnostics.bytesReceived}</div>
+            {diagnostics.requestHeaders && (
+              <div className="mt-2 text-slate-400">
+                <div>📝 请求头:</div>
+                {Object.entries(diagnostics.requestHeaders).map(([key, value]) => (
+                  <div key={key} className="ml-4 text-xs font-mono">
+                    {key}: {value}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </header>
+
+        {/* 请求上下文配置面板 */}
+        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+          <AgentContextSelector />
+        </div>
 
         {/* 安全告警面板 */}
         {securityAlerts.length > 0 && (
