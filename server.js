@@ -1,7 +1,7 @@
 /**
- * 切片 3 后端服务
- * 功能：实现 POST /api/v1/task/resume 接口
- * 核心流程：校验 Redis 快照 → 标记已恢复 → 执行物理删除 → 通知下游
+ * 切片 3-4：后端服务（模拟）
+ * 功能：实现 POST /api/v1/task/resume 和 POST /api/v1/task/abort 接口
+ * 注意：这是 Node.js 模拟实现，真实后端使用 Spring Boot Gateway
  */
 
 const http = require('http');

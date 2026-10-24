@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAgentStream } from './hooks/useAgentStream';
-import type { SuspendData } from './types/agent';
+import { DestructiveConfirmModal } from './components/DestructiveConfirmModal';
 
 interface LogItem {
   text: string;
@@ -8,12 +8,11 @@ interface LogItem {
 }
 
 /**
- * 切片 4：拒绝与回滚（Abort）闭环
- * 核心流程：输入 → 发送 → 流式日志 → 拦截弹窗 → 核准/拒绝 → 回滚/删除
+ * 切片 5：体验打磨与健壮性补充（倒计时 + Diff高亮代码预览）
+ * 核心流程：输入 → 发送 → 流式日志 → 拦截弹窗(倒计时+Diff) → 核准/拒绝 → 回滚/删除
  */
 export default function App() {
   const [prompt, setPrompt] = useState('delete old_file.py');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [customLogs, setCustomLogs] = useState<LogItem[]>([]);
 
   const {
@@ -30,12 +29,11 @@ export default function App() {
   ];
 
   /**
-   * 切片 3：调用真实恢复接口
+   * 切片 5：核准并执行破坏性操作
    */
   const handleConfirm = async () => {
     if (!suspendInfo) return;
 
-    setIsSubmitting(true);
     try {
       const res = await fetch('/api/v1/task/resume', {
         method: 'POST',
@@ -66,18 +64,15 @@ export default function App() {
         ...prev,
         { text: `❌ [Supervisor] 网络异常: ${err.message}`, isError: true },
       ]);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   /**
-   * 切片 4：拒绝与熔断回滚
+   * 切片 5：拒绝并回滚
    */
   const handleReject = async () => {
     if (!suspendInfo) return;
 
-    setIsSubmitting(true);
     try {
       const res = await fetch('/api/v1/task/abort', {
         method: 'POST',
@@ -102,8 +97,6 @@ export default function App() {
         ...prev,
         { text: `❌ [Supervisor] 中止调用失败: ${err.message}`, isError: true },
       ]);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -117,7 +110,7 @@ export default function App() {
         minHeight: '100vh',
       }}
     >
-      <h2 style={{ color: '#60a5fa' }}>NexusMind Supervisor - 切片 4 (Abort 熔断回滚闭环)</h2>
+      <h2 style={{ color: '#60a5fa' }}>NexusMind Supervisor - 切片 5 (体验打磨与健壮性补充)</h2>
 
       {/* 指令交互区 */}
       <div style={{ display: 'flex', gap: '8px', margin: '16px 0' }}>
@@ -196,130 +189,13 @@ export default function App() {
         )}
       </div>
 
-      {/* 破坏性阻断确认弹窗 */}
+      {/* 破坏性阻断确认弹窗（带倒计时 + Diff预览） */}
       {suspendInfo && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#1e1010',
-              border: '2px solid #ef4444',
-              borderRadius: '8px',
-              padding: '24px',
-              maxWidth: '600px',
-              width: '90%',
-              color: '#fff',
-              fontFamily: 'monospace',
-            }}
-          >
-            <h3 style={{ color: '#ef4444', margin: '0 0 16px 0' }}>
-              ⚠️ 拦截到破坏性操作 (SUSPEND_FOR_CONFIRMATION)
-            </h3>
-
-            <div style={{ fontSize: '14px', lineHeight: '1.8', marginBottom: '16px' }}>
-              <div style={{ marginBottom: '12px' }}>
-                <span style={{ color: '#9ca3af', fontWeight: 'bold', marginRight: '8px' }}>
-                  执行ID:
-                </span>
-                {suspendInfo.execution_id}
-              </div>
-
-              <div style={{ marginBottom: '12px' }}>
-                <span style={{ color: '#9ca3af', fontWeight: 'bold', marginRight: '8px' }}>
-                  操作类型:
-                </span>
-                {suspendInfo.operation_type}
-              </div>
-
-              <div style={{ marginBottom: '12px' }}>
-                <span style={{ color: '#9ca3af', fontWeight: 'bold', marginRight: '8px' }}>
-                  风险等级:
-                </span>
-                <span style={{ color: '#fca5a5' }}>{suspendInfo.risk_level}</span>
-              </div>
-
-              <div style={{ marginBottom: '12px' }}>
-                <span style={{ color: '#9ca3af', fontWeight: 'bold', marginRight: '8px' }}>
-                  描述:
-                </span>
-                {suspendInfo.description}
-              </div>
-
-              {suspendInfo.affected_files && suspendInfo.affected_files.length > 0 && (
-                <div>
-                  <span style={{ color: '#9ca3af', fontWeight: 'bold', marginRight: '8px' }}>
-                    受影响文件:
-                  </span>
-                  <div
-                    style={{
-                      marginTop: '8px',
-                      padding: '8px 12px',
-                      backgroundColor: '#2b1515',
-                      borderRadius: '4px',
-                      borderLeft: '3px solid #ef4444',
-                      color: '#fca5a5',
-                    }}
-                  >
-                    {suspendInfo.affected_files.map((f, i) => (
-                      <div key={i}>• {f}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#4b5563',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  fontFamily: 'monospace',
-                  fontWeight: 'normal',
-                  opacity: isSubmitting ? 0.5 : 1,
-                }}
-                disabled={isSubmitting}
-                onClick={handleReject}
-              >
-                {isSubmitting ? '处理中...' : '❌ 拒绝执行'}
-              </button>
-              <button
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#dc2626',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  fontFamily: 'monospace',
-                  fontWeight: 'bold',
-                  opacity: isSubmitting ? 0.5 : 1,
-                }}
-                disabled={isSubmitting}
-                onClick={handleConfirm}
-              >
-                {isSubmitting ? '处理中...' : '✅ 核准并执行'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DestructiveConfirmModal
+          data={suspendInfo}
+          onConfirm={handleConfirm}
+          onReject={handleReject}
+        />
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 /**
- * 切片 2：确认事件数据结构
+ * 切片 5：确认事件数据结构（含Diff预览）
  */
 export interface SuspendData {
   execution_id: string;
@@ -7,7 +7,8 @@ export interface SuspendData {
   operation_type: string;
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   description: string;
-  affected_files?: string[]; // 可选，后端还没传时降级处理
+  affected_files?: string[];
+  change_preview?: string;
   expires_at: string;
 }
 
