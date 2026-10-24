@@ -10,15 +10,16 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    strictPort: true, // 端口被占用时直接报错，避免自动漂移到 5174 导致热更新断连
+    strictPort: true,
     watch: {
-      usePolling: true, // 开启轮询，彻底解决 Windows 保存不触发热重载的问题
-      interval: 100,    // 轮询间隔 100ms
+      usePolling: true,
+      interval: 100,
     },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://localhost:8081',
         changeOrigin: true,
+        secure: false,
       }
     }
   }

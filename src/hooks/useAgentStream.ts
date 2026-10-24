@@ -2,8 +2,11 @@ import { useState, useCallback, useRef } from 'react';
 import type { SuspendData, StreamEventChunk } from '../types/agent';
 
 /**
- * 切片 2：极简流式 Hook
- * 职责：读取 SSE 流 → 解析 JSON 帧 → 识别 SUSPEND_FOR_CONFIRMATION 事件
+ * 流式 Agent Hook
+ * 职责：
+ * 1. 读取 SSE 流 → 解析 JSON 帧 → 识别 SUSPEND_FOR_CONFIRMATION 事件
+ * 2. 从 localStorage 读取 JWT Token
+ * 3. 在请求头中添加 Authorization: Bearer <token>
  */
 export function useAgentStream() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -124,10 +127,19 @@ export function useAgentStream() {
         addLog(`🚀 启动流式连接 | Task ID: ${taskId}`, 'GATEWAY');
         addLog(`📝 Prompt: ${prompt}`, 'INPUT');
 
+        // 从 localStorage 获取 Token
+        const token = localStorage.getItem('nexusmind_token');
+        if (!token) {
+          throw new Error('Token 未找到，请重新登录');
+        }
+
         const url = `/api/v1/agent/stream?prompt=${encodeURIComponent(prompt)}&agent=Supervisor&agentRole=supervisor`;
         const response = await fetch(url, {
           method: 'GET',
-          headers: { Accept: 'text/event-stream' },
+          headers: { 
+            'Accept': 'text/event-stream',
+            'Authorization': `Bearer ${token}`,
+          },
           signal: controller.signal,
         });
 
