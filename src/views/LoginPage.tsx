@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { authStorage } from '../utils/auth';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
-interface Props {
-  onLoginSuccess: () => void;
-  onError?: (error: string) => void;
-}
-
-export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onError }) => {
+/**
+ * 登录页
+ *
+ * 路由: /login（无侧边栏的全屏路由，RequireAuth 之外）
+ * 登录成功后跳转回原目标页（守卫记录的 state.from），默认回控制台
+ */
+export const LoginPage: React.FC = () => {
+  const { login } = useAuth();
+  const navigate = useNavigate();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin123');
   const [errorMsg, setErrorMsg] = useState('');
@@ -18,48 +22,12 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onError }) => {
     setLoading(true);
 
     try {
-      // 使用相对路径，Vite 代理转发到后端
-      const res = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const contentType = res.headers.get('content-type');
-      let data;
-
-      try {
-        if (contentType?.includes('application/json')) {
-          data = await res.json();
-        } else {
-          const text = await res.text();
-          setErrorMsg(`服务器返回错误 (${res.status}): ${text}`);
-          return;
-        }
-      } catch (parseErr) {
-        setErrorMsg(`JSON 解析失败: ${parseErr}`);
-        return;
-      }
-
-      if (!res.ok) {
-        const error = data.message || '登录失败';
-        setErrorMsg(error);
-        onError?.(error);
-        return;
-      }
-
-      // 保存 Token 和用户信息到 localStorage
-      authStorage.setToken(data.token, data.expires_in, {
-        username: data.username,
-        role: data.role,
-      });
-
-      // 触发登录成功回调
-      onLoginSuccess();
+      await login(username, password);
+      // 跳回守卫记录的来源页（无则回控制台）
+      const from = window.history.state?.usr?.from as string | undefined;
+      navigate(from || '/', { replace: true });
     } catch (err: any) {
-      const error = `网络错误: ${err.message}`;
-      setErrorMsg(error);
-      onError?.(error);
+      setErrorMsg(err.message || '登录失败');
     } finally {
       setLoading(false);
     }
@@ -68,13 +36,12 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onError }) => {
   return (
     <div
       style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.85)',
+        background: '#09090b',
+        minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 100000,
+        fontFamily: 'monospace',
       }}
     >
       <div
@@ -85,7 +52,6 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onError }) => {
           padding: '32px',
           width: '380px',
           color: '#f4f4f5',
-          fontFamily: 'monospace',
         }}
       >
         <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#60a5fa' }}>

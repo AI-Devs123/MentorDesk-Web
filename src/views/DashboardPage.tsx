@@ -1,50 +1,29 @@
 import { useState } from 'react';
-import { useAuth } from './hooks/useAuth';
-import { useAgentStream } from './hooks/useAgentStream';
-import { authStorage } from './utils/auth';
-import { LoginModal } from './components/LoginModal';
-import { UserBar } from './components/UserBar';
-import { TaskInput } from './components/TaskInput';
-import { LogViewer } from './components/LogViewer';
-import { DestructiveConfirmModal } from './components/DestructiveConfirmModal';
+import { useAuth } from '../context/AuthContext';
+import { useAgentStream } from '../hooks/useAgentStream';
+import { authStorage } from '../utils/auth';
+import { TaskInput } from '../components/TaskInput';
+import { LogViewer } from '../components/LogViewer';
+import { DestructiveConfirmModal } from '../components/DestructiveConfirmModal';
 
 interface LogItem {
   text: string;
   isError?: boolean;
 }
 
-export default function App() {
-  const { currentUser, isLoggedIn, isLoading, logout } = useAuth();
+/**
+ * 执行控制台页面（原 App.tsx 的 dashboard 内容）
+ *
+ * 路由: / （MainLayout 子路由 index）
+ * 职责: SSE 流式任务执行 + 破坏性操作确认 + 日志展示
+ * 登录态由 MainLayout/RequireAuth 保障，本页不再处理认证分支。
+ */
+export const DashboardPage: React.FC = () => {
+  const { logout } = useAuth();
   const [prompt, setPrompt] = useState('delete old_file.py');
   const [customLogs, setCustomLogs] = useState<LogItem[]>([]);
 
   const { logs, isStreaming, suspendInfo, setSuspendInfo, startStream } = useAgentStream();
-
-  // 如果还在加载认证状态，显示空屏
-  if (isLoading) {
-    return (
-      <div style={{ background: '#09090b', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: '#888' }}>加载中...</div>
-      </div>
-    );
-  }
-
-  // 未登录时显示登录页
-  if (!isLoggedIn) {
-    return (
-      <div style={{ background: '#09090b', minHeight: '100vh' }}>
-        <LoginModal
-          onLoginSuccess={() => {
-            // 延迟一小段时间让 useAuth 检测到 localStorage 变化
-            setTimeout(() => {
-              // 强制重新检查认证状态
-              window.dispatchEvent(new Event('storage'));
-            }, 100);
-          }}
-        />
-      </div>
-    );
-  }
 
   const displayLogs: LogItem[] = [...logs.map((l) => ({ text: l })), ...customLogs];
 
@@ -172,12 +151,9 @@ export default function App() {
         fontFamily: 'monospace',
         backgroundColor: '#121212',
         color: '#eee',
-        minHeight: '100vh',
+        minHeight: 'calc(100vh - 60px)',
       }}
     >
-      {/* 用户栏与退出登录 */}
-      <UserBar user={currentUser} onLogout={logout} />
-
       {/* 任务输入框 */}
       <TaskInput value={prompt} onChange={setPrompt} onSubmit={handleStartTask} isLoading={isStreaming} />
 
@@ -190,4 +166,4 @@ export default function App() {
       )}
     </div>
   );
-}
+};
