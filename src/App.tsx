@@ -92,6 +92,7 @@ export default function App() {
         body: JSON.stringify({
           execution_id: suspendInfo.execution_id,
           token: suspendInfo.token,
+          promptHash: suspendInfo.promptHash,
         }),
       });
 

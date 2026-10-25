@@ -23,18 +23,22 @@ export default defineConfig({
         secure: false,
       },
       // SSE 流式执行在 Gateway(:8080)
+      // 注意：SSE 走普通 HTTP 长连接即可，不要设 Connection: upgrade（那是 WebSocket 用的，
+      // 给 SSE/普通 POST 加这个头只会干扰代理行为）
       '/api/v1/agent': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
-        // 确保所有请求头都被转发，包括 Authorization
-        headers: {
-          'Connection': 'upgrade'
-        }
       },
       // 任务恢复 / 中止在 Gateway(:8080)
       '/api/v1/task': {
         target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+      },
+      // 日记审查 / 落盘在 Supervisor(:8081)（JournalReviewController 仅存在于 supervisor）
+      '/api/v1/journal': {
+        target: 'http://localhost:8081',
         changeOrigin: true,
         secure: false,
       }

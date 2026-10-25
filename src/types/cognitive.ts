@@ -157,3 +157,52 @@ export interface TutorReflectionPrompt {
     insight: string;
   }>;
 }
+
+
+/**
+ * API 响应类型定义
+ */
+
+/**
+ * 日记审查 API 响应
+ * 后端端点: POST /api/v1/journal/review
+ */
+export interface JournalReviewResponse {
+  /** 是否成功处理 */
+  success: boolean;
+
+  data: {
+    /** 结构化提取后的日志条目 */
+    entry: JournalEntry;
+
+    /**
+     * Append-only 物理落盘路径
+     * 格式: YYYY/MM/DD/entry-{id}.json（与后端 generateRelativePath 一致）
+     * 例: 2026/10/25/entry-2026-10-25-001.json
+     */
+    physicalPath: string;
+
+    /**
+     * 处理统计信息（与后端 ProcessingStats 字段一一对应）
+     */
+    processingStats?: {
+      /** 识别的突破点数量 */
+      breakthroughCount: number;
+
+      /** 识别的阻碍数量 */
+      blockerCount: number;
+
+      /** 提取的行动项数量 */
+      actionCount: number;
+
+      /** 处理耗时 (毫秒) */
+      processingTimeMs: number;
+    };
+  };
+
+  /** 错误消息 (success=false 时存在) */
+  message?: string;
+
+  /** 详细的校验错误 */
+  validationErrors?: Record<string, string>;
+}

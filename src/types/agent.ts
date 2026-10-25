@@ -4,6 +4,7 @@
 export interface SuspendData {
   execution_id: string;
   token: string;
+  promptHash?: string;
   operation_type: string;
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   description: string;
@@ -22,6 +23,7 @@ export interface StreamEventChunk {
   content: string;
   execution_id?: string;
   token?: string;
+  promptHash?: string;
   operation_type?: string;
   risk_level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   description?: string;

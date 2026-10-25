@@ -75,3 +75,25 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+/**
+ * 日记相关 API 集合
+ * 与后端端点: /api/v1/journal/* 对接
+ *
+ * 注意：后端当前仅实现 POST /api/v1/journal/review（同步返回完整结果），
+ * 尚无 SSE 流式端点（/api/v1/journal/{entryId}/stream 未实现），
+ * 待后端补齐流式通道后再加订阅方法。
+ */
+export const journalAPI = {
+  /**
+   * 提交日记草稿进行结构化抽取和落盘
+   * @param rawContent 原始日记内容
+   * @returns 结构化抽取结果和物理落盘信息
+   */
+  submitForReview: (rawContent: string) => {
+    return apiClient.post<any>(
+      '/api/v1/journal/review',
+      { rawContent }
+    );
+  },
+};

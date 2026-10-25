@@ -51,8 +51,9 @@ export function useAgentStream() {
             stage === 'LAYER3_CONFIRMATION_REQUIRED') {
           try {
             const payload: SuspendData = {
-              execution_id: chunk.execution_id || taskId,
+              execution_id: chunk.execution_id || taskId || '',
               token: chunk.token || '',
+              promptHash: chunk.promptHash || '',
               operation_type: chunk.operation_type || 'UNKNOWN',
               risk_level: (chunk.risk_level as any) || 'MEDIUM',
               description: chunk.description || content || '破坏性操作',
@@ -149,9 +150,11 @@ export function useAgentStream() {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          const errorMsg = response.status === 403 
-            ? `认证失败 (403): 请检查 Token 是否过期或角色权限不足`
+          // 403 在本项目里的常见来源不是 Token：后端对"无匹配 handler/方法不匹配"的请求
+          // 会以 403 空响应返回（ERROR dispatch 时无人写 SecurityContext），
+          // 其次是角色权限不足；401 才是 Token 缺失/过期。
+          const errorMsg = response.status === 403
+            ? `请求被拒绝 (403)：可能是接口不存在、方法不匹配或角色权限不足`
             : `HTTP ${response.status}: ${response.statusText}`;
           throw new Error(errorMsg);
         }
