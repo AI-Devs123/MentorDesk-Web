@@ -206,3 +206,47 @@ export interface JournalReviewResponse {
   /** 详细的校验错误 */
   validationErrors?: Record<string, string>;
 }
+
+/**
+ * 处理统计信息（与后端 ProcessingStats 一一对应）
+ */
+export interface ProcessingStats {
+  /** 识别的突破点数量 */
+  breakthroughCount: number;
+  /** 识别的阻碍数量 */
+  blockerCount: number;
+  /** 提取的行动项数量 */
+  actionCount: number;
+  /** 处理耗时 (毫秒) */
+  processingTimeMs: number;
+}
+
+/**
+ * 认知协同流 journal_result 数据帧载荷（与后端 DataPayload 1:1）
+ */
+export interface DataPayload {
+  /** 结构化日记条目 */
+  entry: JournalEntry;
+  /** Append-only 物理落盘相对路径 */
+  physicalPath: string;
+  /** 处理统计信息 */
+  processingStats?: ProcessingStats;
+}
+
+/**
+ * 认知协同流 SSE 单帧（网关将 CognitiveStreamChunk 转为 Map 推送）
+ *
+ * - 过程帧: stage/status/content 有值，无 event/data
+ * - 数据帧: 额外带 event(journal_result|tutor_prompt) + data(二次编码的 DTO JSON 字符串)
+ * - 终帧:   stage="done" / content="WORKFLOW_COMPLETED"
+ * - 认证错: stage="AUTH_ERROR" | "RBAC_SETUP_ERROR"
+ */
+export interface CognitiveStreamFrame {
+  taskId?: string;
+  timestamp?: number;
+  stage?: string;
+  status?: string;
+  content?: string;
+  event?: string;
+  data?: string;
+}

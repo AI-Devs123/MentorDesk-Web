@@ -1,7 +1,7 @@
 /**
  * 导航配置 —— 新增业务页面只需在此加一项，并在路由表中注册对应组件
  *
- * 顺序即侧边栏展示顺序（日记沙箱为第一项）
+ * 顺序即侧边栏展示顺序（日记沙盒为第一项）
  */
 export interface NavItem {
   /** 路由路径（与路由表 path 一致） */
@@ -17,9 +17,15 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   {
     path: '/sandbox/journal',
-    label: '日记沙箱',
+    label: '日记沙盒',
     icon: '📝',
-    title: '日记沙箱 · Journal Sandbox',
+    title: '日记沙盒 · Journal Sandbox',
+  },
+  {
+    path: '/sandbox/cognitive',
+    label: '认知沙盒',
+    icon: '🧩',
+    title: '认知工作流沙盒 · Cognitive Workflow Sandbox',
   },
   {
     path: '/',

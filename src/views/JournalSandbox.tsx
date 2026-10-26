@@ -2,7 +2,7 @@ import React from 'react';
 import { JournalSandboxPanel } from '../components/JournalSandboxPanel';
 
 /**
- * 日记沙箱页面
+ * 日记沙盒页面
  *
  * 路由: /sandbox/journal（MainLayout 子路由，导航由侧边栏接管）
  * 用途: 切片 2 独立验证和开发测试

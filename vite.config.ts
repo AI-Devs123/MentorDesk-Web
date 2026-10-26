@@ -41,6 +41,12 @@ export default defineConfig({
         target: 'http://localhost:8081',
         changeOrigin: true,
         secure: false,
+      },
+      // 认知协同流式（CognitiveReflectDAG）在 Gateway(:8080)
+      '/api/v1/cognitive': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
       }
     }
   }
