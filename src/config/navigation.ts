@@ -34,6 +34,12 @@ export const NAV_ITEMS: NavItem[] = [
     title: '代码分析沙盒 · Code Analysis Sandbox',
   },
   {
+    path: '/sandbox/web-curate',
+    label: '网页萃取',
+    icon: '🌐',
+    title: '网页知识萃取沙盒 · Web Curate Sandbox',
+  },
+  {
     path: '/',
     label: '执行控制台',
     icon: '🖥️',
