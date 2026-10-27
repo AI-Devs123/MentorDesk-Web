@@ -47,6 +47,12 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
+      },
+      // 代码分析流式（/analyze/stream）与主动中断（/analyze/cancel）在 Gateway(:8080)
+      '/api/v1/code': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
       }
     }
   }

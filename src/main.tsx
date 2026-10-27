@@ -9,6 +9,7 @@ import { LoginPage } from './views/LoginPage'
 import { DashboardPage } from './views/DashboardPage'
 import { JournalSandbox } from './views/JournalSandbox'
 import { CognitiveSandbox } from './views/CognitiveSandbox'
+import { CodeAnalysisSandbox } from './views/CodeAnalysisSandbox'
 
 /**
  * 路由表
@@ -41,6 +42,7 @@ createRoot(document.getElementById('root')!).render(
             <Route index element={<DashboardPage />} />
             <Route path="sandbox/journal" element={<JournalSandbox />} />
             <Route path="sandbox/cognitive" element={<CognitiveSandbox />} />
+            <Route path="sandbox/code-analysis" element={<CodeAnalysisSandbox />} />
           </Route>
         </Routes>
       </AuthProvider>

@@ -28,6 +28,12 @@ export const NAV_ITEMS: NavItem[] = [
     title: '认知工作流沙盒 · Cognitive Workflow Sandbox',
   },
   {
+    path: '/sandbox/code-analysis',
+    label: '代码分析',
+    icon: '🧠',
+    title: '代码分析沙盒 · Code Analysis Sandbox',
+  },
+  {
     path: '/',
     label: '执行控制台',
     icon: '🖥️',
