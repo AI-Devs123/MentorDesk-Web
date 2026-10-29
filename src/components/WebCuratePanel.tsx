@@ -1,8 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useCurateStream } from '../hooks/useCurateStream';
+import { useNexusStream } from '../hooks/useNexusStream';
+import { interpretCurateFrame } from '../stream/interpreters/curateInterpreter';
+import type { StreamFrame } from '../stream/eventTypes';
 import { SecurityViolationBanner } from './SecurityViolationBanner';
 import { WebCurateResultCard } from './WebCurateResultCard';
 import { formatBytes } from '../types/web-curate';
+import type {
+  CurateStreamStatus,
+  StagedPayload,
+  StreamLog,
+  WebCurateResultData,
+} from '../types/web-curate';
 
 /** 阶段推进顺序（用于进度条百分比） */
 const STAGE_ORDER = [
@@ -33,33 +41,54 @@ function formatDuration(ms: number): string {
 /**
  * 网页策展沙盒面板（Week 6 切片5）
  *
- * 三项职责：
- * 1. 消费 /api/v1/curate/stream 专用 SSE，按 stage 驱动 UI 状态机
- *    （SECURITY_CHECK → FETCHING → EXTRACTED → STAGED → COMPLETED）
- * 2. 安全熔断专属红色告警（SECURITY_VIOLATION / 关键词兜底），不降级为普通错误
- * 3. AbortController 主动中断：切断 SSE + POST 取消信号
+ * Slice 1 改造：统一经 useNexusStream 传输内核，本面板只保留领域状态机，
+ * 通过 subscribe 收到原始帧后由 interpretCurateFrame 翻译为状态指令。
+ * 安全熔断 / RBAC / 主动中断（切断 SSE + POST 取消信号）语义与旧版一致。
  */
 export const WebCuratePanel: React.FC = () => {
   const [url, setUrl] = useState('');
   const [forceRender, setForceRender] = useState(false);
   const logListRef = useRef<HTMLDivElement>(null);
 
-  const {
-    status,
-    stage,
-    taskId,
-    logs,
-    staged,
-    result,
-    securityMessage,
-    error,
-    elapsedMs,
-    start,
-    stop,
-    reset,
-  } = useCurateStream();
+  const { isStreaming, subscribe, startStream, abort, reset: hookReset } = useNexusStream({
+    endpoint: '/api/v1/curate/stream',
+    cancelEndpoint: '/api/v1/curate/cancel',
+  });
 
-  const isStreaming = status === 'streaming';
+  const [status, setStatus] = useState<CurateStreamStatus>('idle');
+  const [stage, setStage] = useState('');
+  const [taskId, setTaskId] = useState('');
+  const [logs, setLogs] = useState<StreamLog[]>([]);
+  const [staged, setStaged] = useState<StagedPayload | null>(null);
+  const [result, setResult] = useState<WebCurateResultData | null>(null);
+  const [securityMessage, setSecurityMessage] = useState('');
+  const [error, setError] = useState('');
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  const haltRef = useRef(false);
+  const startAtRef = useRef(0);
+
+  // 订阅原始帧 → 领域解释器 → 落到本地状态机
+  useEffect(() => {
+    const off = subscribe((frame: StreamFrame) => {
+      if (haltRef.current) return;
+      const r = interpretCurateFrame(frame);
+      if (r.freeze) haltRef.current = true;
+      if (r.logEntry) {
+        setLogs((prev) => {
+          const next = [...prev, r.logEntry!];
+          return next.length > 500 ? next.slice(next.length - 500) : next;
+        });
+      }
+      if (r.setStatus) setStatus(r.setStatus);
+      if (r.setStaged) setStaged(r.setStaged);
+      if (r.setResult) setResult(r.setResult);
+      if (r.setSecurityMessage) setSecurityMessage(r.setSecurityMessage);
+      if (r.setError) setError(r.setError);
+    });
+    return off;
+  }, [subscribe]);
+
   const isSecurityHalt = status === 'security_violation';
 
   // 控制台自动滚动到底部
@@ -68,6 +97,15 @@ export const WebCuratePanel: React.FC = () => {
       logListRef.current.scrollTop = logListRef.current.scrollHeight;
     }
   }, [logs]);
+
+  // 流式期间实时刷新耗时
+  useEffect(() => {
+    if (status !== 'streaming') return;
+    const timer = window.setInterval(() => {
+      setElapsedMs(Date.now() - startAtRef.current);
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [status]);
 
   const percent = useMemo(() => {
     const idx = STAGE_ORDER.indexOf(stage);
@@ -87,7 +125,37 @@ export const WebCuratePanel: React.FC = () => {
           : 'bg-cyan-500';
 
   const handleStart = () => {
-    void start(url, forceRender);
+    const tid = `WEB-${Date.now()}`;
+    setTaskId(tid);
+    startAtRef.current = Date.now();
+    haltRef.current = false;
+    setStatus('streaming');
+    setStage('');
+    setLogs([]);
+    setStaged(null);
+    setResult(null);
+    setSecurityMessage('');
+    setError('');
+    setElapsedMs(0);
+    startStream({ url, taskId: tid, forceRender });
+  };
+
+  const stop = () => {
+    abort();
+  };
+
+  const handleReset = () => {
+    hookReset();
+    haltRef.current = false;
+    setStatus('idle');
+    setStage('');
+    setTaskId('');
+    setLogs([]);
+    setStaged(null);
+    setResult(null);
+    setSecurityMessage('');
+    setError('');
+    setElapsedMs(0);
   };
 
   return (
@@ -163,7 +231,7 @@ export const WebCuratePanel: React.FC = () => {
           </button>
 
           <button
-            onClick={reset}
+            onClick={handleReset}
             disabled={isStreaming}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 font-medium text-sm rounded-lg transition-colors"
           >
@@ -217,7 +285,7 @@ export const WebCuratePanel: React.FC = () => {
         <div className="text-xs text-slate-400 min-h-5">
           {isSecurityHalt
             ? '已触发安全熔断：目标未通过 SSRF / RBAC 校验，下游流程已终止。'
-            : (STAGE_HINT[stage] ?? (status === 'idle' ? '等待提交目标 URL…' : ''))}
+            : STAGE_HINT[stage] ?? (status === 'idle' ? '等待提交目标 URL…' : '')}
         </div>
 
         {/* STAGED 先行回执：COMPLETED 之前即可看到落盘位置 */}

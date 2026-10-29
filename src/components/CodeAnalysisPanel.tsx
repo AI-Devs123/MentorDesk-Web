@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useCodeAnalysisStream } from '../hooks/useCodeAnalysisStream';
+import { useNexusStream } from '../hooks/useNexusStream';
+import { interpretCodeFrame, type ScannedFileEntry } from '../stream/interpreters/codeInterpreter';
+import type { StreamFrame } from '../stream/eventTypes';
+import type { StreamStatus, UnifiedCodeSymbol } from '../types/code-analysis';
 import { SecurityViolationBanner } from './SecurityViolationBanner';
-import type { UnifiedCodeSymbol } from '../types/code-analysis';
 
 /** 默认沙箱项目名（与后端 /data/nexusmind/sandbox 下的子目录一致） */
 const DEFAULT_PROJECT = 'nexusmind-agent-workers';
@@ -43,34 +45,65 @@ function formatDuration(ms: number): string {
 /**
  * 代码分析沙盒面板（切片5 前端联动）
  *
- * 三项职责：
- * 1. 消费 /api/v1/code/analyze/stream 专用 SSE，按 stage 驱动 UI 状态机
- *    （SCANNING → PARSING → INDEXED → COMPLETED）
- * 2. 安全熔断专属红色告警（SECURITY_VIOLATION / 关键词兜底），不降级为普通错误
- * 3. AbortController 主动中断：切断 SSE + POST 取消信号
+ * Slice 1 改造：统一经 useNexusStream 传输内核，本面板只保留领域状态机，
+ * subscribe 收到原始帧后由 interpretCodeFrame 翻译为状态指令（含符号增量追加与文件滚动）。
  */
 export const CodeAnalysisPanel: React.FC = () => {
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT);
   const fileListRef = useRef<HTMLDivElement>(null);
 
-  const {
-    status,
-    stage,
-    taskId,
-    currentFile,
-    processedFiles,
-    totalFiles,
-    files,
-    symbols,
-    securityMessage,
-    error,
-    elapsedMs,
-    start,
-    stop,
-    reset,
-  } = useCodeAnalysisStream();
+  const { isStreaming, subscribe, startStream, abort, reset: hookReset } = useNexusStream({
+    endpoint: '/api/v1/code/analyze/stream',
+    cancelEndpoint: '/api/v1/code/analyze/cancel',
+  });
 
-  const isStreaming = status === 'streaming';
+  const [status, setStatus] = useState<StreamStatus>('idle');
+  const [stage, setStage] = useState('');
+  const [taskId, setTaskId] = useState('');
+  const [currentFile, setCurrentFile] = useState('');
+  const [processedFiles, setProcessedFiles] = useState(0);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [files, setFiles] = useState<ScannedFileEntry[]>([]);
+  const [symbols, setSymbols] = useState<UnifiedCodeSymbol[]>([]);
+  const [securityMessage, setSecurityMessage] = useState('');
+  const [error, setError] = useState('');
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  const haltRef = useRef(false);
+  const startAtRef = useRef(0);
+
+  // 订阅原始帧 → 领域解释器 → 落到本地状态机
+  useEffect(() => {
+    const off = subscribe((frame: StreamFrame) => {
+      if (haltRef.current) return;
+      const r = interpretCodeFrame(frame);
+      if (r.freeze) haltRef.current = true;
+      if (r.setStatus) setStatus(r.setStatus);
+      if (r.setStage) setStage(r.setStage);
+      if (r.setTotalFiles !== undefined) setTotalFiles(r.setTotalFiles);
+      if (r.setProcessedFiles !== undefined) setProcessedFiles(r.setProcessedFiles);
+      if (r.setCurrentFile) setCurrentFile(r.setCurrentFile);
+      if (r.addFile) {
+        const f = r.addFile;
+        setFiles((prev) => {
+          if (prev.length > 0 && prev[prev.length - 1].filePath === f.filePath) return prev;
+          const next = [...prev, f];
+          return next.length > 500 ? next.slice(next.length - 500) : next;
+        });
+      }
+      if (r.addSymbols) {
+        setSymbols((prev) => {
+          const seen = new Set(prev.map((s) => s.symbolId));
+          const fresh = r.addSymbols!.filter((s) => s && s.symbolId && !seen.has(s.symbolId));
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      }
+      if (r.setSecurityMessage) setSecurityMessage(r.setSecurityMessage);
+      if (r.setError) setError(r.setError);
+    });
+    return off;
+  }, [subscribe]);
+
   const isSecurityHalt = status === 'security_violation';
 
   // 文件列表自动滚动
@@ -79,6 +112,15 @@ export const CodeAnalysisPanel: React.FC = () => {
       fileListRef.current.scrollTop = fileListRef.current.scrollHeight;
     }
   }, [files]);
+
+  // 流式期间实时刷新耗时
+  useEffect(() => {
+    if (status !== 'streaming') return;
+    const timer = window.setInterval(() => {
+      setElapsedMs(Date.now() - startAtRef.current);
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [status]);
 
   const percent = useMemo(() => {
     if (totalFiles > 0) {
@@ -119,11 +161,41 @@ export const CodeAnalysisPanel: React.FC = () => {
           : 'bg-cyan-500';
 
   const handleStart = () => {
-    void start(projectName.trim(), 'JAVA');
+    const tid = `CODE-${Date.now()}`;
+    setTaskId(tid);
+    startAtRef.current = Date.now();
+    haltRef.current = false;
+    setStatus('streaming');
+    setStage('');
+    setCurrentFile('');
+    setProcessedFiles(0);
+    setTotalFiles(0);
+    setFiles([]);
+    setSymbols([]);
+    setSecurityMessage('');
+    setError('');
+    setElapsedMs(0);
+    startStream({ projectName: projectName.trim(), taskId: tid, language: 'JAVA' });
+  };
+
+  const stop = () => {
+    abort();
   };
 
   const handleReset = () => {
-    reset();
+    hookReset();
+    haltRef.current = false;
+    setStatus('idle');
+    setStage('');
+    setTaskId('');
+    setCurrentFile('');
+    setProcessedFiles(0);
+    setTotalFiles(0);
+    setFiles([]);
+    setSymbols([]);
+    setSecurityMessage('');
+    setError('');
+    setElapsedMs(0);
   };
 
   return (

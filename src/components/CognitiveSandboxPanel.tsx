@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
-import { useCognitiveStream } from '../hooks/useCognitiveStream';
+import React, { useEffect, useState } from 'react';
+import { useNexusStream } from '../hooks/useNexusStream';
+import {
+  interpretCognitiveFrame,
+  type CognitiveProgressItem,
+} from '../stream/interpreters/cognitiveInterpreter';
+import type { StreamFrame } from '../stream/eventTypes';
 import { LogViewer } from './LogViewer';
 import { JournalResultCard } from './JournalResultCard';
 import { TutorReflectBlock } from './TutorReflectBlock';
+import type { DataPayload, TutorReflectionPrompt } from '../types/cognitive';
 
 /** 预置示例草稿（含阻碍项，可触发 Tutor 分支） */
 const SAMPLE_INPUT =
@@ -14,25 +20,36 @@ const SAMPLE_INPUT =
 /**
  * 认知工作流沙盒面板（切片5）
  *
- * 职责:
- * - 输入复盘草稿 → 触发 /api/v1/cognitive/stream（SSE 全链路）
- * - 实时渲染过程日志（JournalAgent / Supervisor / TutorAgent）
- * - 复用 JournalResultCard 渲染三段式日记卡片（journal_result）
- * - 渲染 TutorReflectBlock 启发式提问（tutor_prompt）
+ * Slice 1 改造：统一经 useNexusStream 传输内核，本面板只保留领域状态机，
+ * subscribe 收到原始帧后由 interpretCognitiveFrame 翻译为状态指令
+ * （journal_result / tutor_prompt / 过程日志 / 终帧 / 认证错误）。
  */
 export const CognitiveSandboxPanel: React.FC = () => {
   const [rawText, setRawText] = useState(SAMPLE_INPUT);
-  const {
-    progress,
-    payload,
-    tutorPrompt,
-    isStreaming,
-    completed,
-    error,
-    start,
-    abort,
-    reset,
-  } = useCognitiveStream();
+
+  const { isStreaming, subscribe, startStream, abort, reset: hookReset } = useNexusStream({
+    endpoint: '/api/v1/cognitive/stream',
+  });
+
+  const [progress, setProgress] = useState<CognitiveProgressItem[]>([]);
+  const [payload, setPayload] = useState<DataPayload | null>(null);
+  const [tutorPrompt, setTutorPrompt] = useState<TutorReflectionPrompt | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const off = subscribe((frame: StreamFrame) => {
+      const r = interpretCognitiveFrame(frame);
+      if (r.addProgress) {
+        setProgress((prev) => [...prev, r.addProgress!]);
+      }
+      if (r.setCompleted) setCompleted(true);
+      if (r.setPayload) setPayload(r.setPayload);
+      if (r.setTutorPrompt) setTutorPrompt(r.setTutorPrompt);
+      if (r.setError) setError(r.setError);
+    });
+    return off;
+  }, [subscribe]);
 
   const logs = progress.map((p) => {
     const status = p.status ? `[${p.status}]` : '';
@@ -40,12 +57,27 @@ export const CognitiveSandboxPanel: React.FC = () => {
   });
 
   const handleRun = () => {
-    void start(rawText);
+    if (!rawText.trim()) return;
+    setProgress([]);
+    setPayload(null);
+    setTutorPrompt(null);
+    setCompleted(false);
+    setError('');
+    startStream({ rawContent: rawText });
+  };
+
+  const handleAbort = () => {
+    abort();
   };
 
   const handleClear = () => {
+    hookReset();
     setRawText('');
-    reset();
+    setProgress([]);
+    setPayload(null);
+    setTutorPrompt(null);
+    setCompleted(false);
+    setError('');
   };
 
   return (
@@ -101,7 +133,7 @@ export const CognitiveSandboxPanel: React.FC = () => {
           </button>
 
           <button
-            onClick={abort}
+            onClick={handleAbort}
             disabled={!isStreaming}
             className="px-4 py-2 bg-rose-700 hover:bg-rose-600 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-medium text-sm rounded-lg transition-colors"
           >

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useAgentStream } from '../hooks/useAgentStream';
+import { useNexusStream } from '../hooks/useNexusStream';
+import { agentInterpreter } from '../stream/interpreters/agentInterpreter';
 import { authStorage } from '../utils/auth';
 import { TaskInput } from '../components/TaskInput';
 import { LogViewer } from '../components/LogViewer';
@@ -23,7 +24,11 @@ export const DashboardPage: React.FC = () => {
   const [prompt, setPrompt] = useState('delete old_file.py');
   const [customLogs, setCustomLogs] = useState<LogItem[]>([]);
 
-  const { logs, isStreaming, suspendInfo, setSuspendInfo, startStream } = useAgentStream();
+  const { logs, isStreaming, suspendInfo, setSuspendInfo, startStream } = useNexusStream({
+    endpoint: '/api/v1/agent/stream',
+    defaultQuery: { agent: 'Supervisor', agentRole: 'supervisor' },
+    interpreter: agentInterpreter,
+  });
 
   const displayLogs: LogItem[] = [...logs.map((l) => ({ text: l })), ...customLogs];
 
@@ -42,7 +47,7 @@ export const DashboardPage: React.FC = () => {
     }
 
     setCustomLogs([]);
-    startStream(prompt);
+    startStream({ prompt });
   };
 
   /**
@@ -90,10 +95,11 @@ export const DashboardPage: React.FC = () => {
         ...prev,
         { text: `✅ [Supervisor] ${data.message}` },
       ]);
-    } catch (err: any) {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       setCustomLogs((prev) => [
         ...prev,
-        { text: `❌ [Supervisor] 网络异常: ${err.message}`, isError: true },
+        { text: `❌ [Supervisor] 网络异常: ${msg}`, isError: true },
       ]);
     }
   };
@@ -136,10 +142,11 @@ export const DashboardPage: React.FC = () => {
           isError: true,
         },
       ]);
-    } catch (err: any) {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       setCustomLogs((prev) => [
         ...prev,
-        { text: `❌ [Supervisor] 中止调用失败: ${err.message}`, isError: true },
+        { text: `❌ [Supervisor] 中止调用失败: ${msg}`, isError: true },
       ]);
     }
   };
