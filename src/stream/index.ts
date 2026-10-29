@@ -35,3 +35,26 @@ export {
   type CognitiveInterpretation,
   type CognitiveProgressItem,
 } from './interpreters/cognitiveInterpreter';
+export {
+  interpretDagFrame,
+  deriveStatuses,
+  AGENT_FLOW_TOPOLOGY,
+  type DagTopology,
+  type DagNodeDef,
+  type DagEdgeDef,
+  type DagNodeStatus,
+  type DagInterpreterResult,
+} from './interpreters/dagInterpreter';
+export {
+  computeDepths,
+  computeLayeredLayout,
+  type DagLayoutOptions,
+  type DagLayoutResult,
+  type DagPoint,
+} from './dagLayout';
+export {
+  dagReducer,
+  INITIAL_DAG_STATE,
+  type DagState,
+  type DagAction,
+} from './dagStateMachine';

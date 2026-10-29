@@ -5,6 +5,7 @@ import { agentInterpreter } from '../stream/interpreters/agentInterpreter';
 import { authStorage } from '../utils/auth';
 import { TaskInput } from '../components/TaskInput';
 import { LogViewer } from '../components/LogViewer';
+import { DagTopologyBoard } from '../components/DagTopologyBoard';
 import { DestructiveConfirmModal } from '../components/DestructiveConfirmModal';
 
 interface LogItem {
@@ -24,7 +25,7 @@ export const DashboardPage: React.FC = () => {
   const [prompt, setPrompt] = useState('delete old_file.py');
   const [customLogs, setCustomLogs] = useState<LogItem[]>([]);
 
-  const { logs, isStreaming, suspendInfo, setSuspendInfo, startStream } = useNexusStream({
+  const { logs, isStreaming, suspendInfo, setSuspendInfo, startStream, subscribe } = useNexusStream({
     endpoint: '/api/v1/agent/stream',
     defaultQuery: { agent: 'Supervisor', agentRole: 'supervisor' },
     interpreter: agentInterpreter,
@@ -163,6 +164,11 @@ export const DashboardPage: React.FC = () => {
     >
       {/* 任务输入框 */}
       <TaskInput value={prompt} onChange={setPrompt} onSubmit={handleStartTask} isLoading={isStreaming} />
+
+      {/* 执行 DAG 拓扑看板（Slice 2）：复用同一条 agent 流，经 subscribe 派生实时 DAG */}
+      <div style={{ margin: '16px 0' }}>
+        <DagTopologyBoard subscribe={subscribe} isStreaming={isStreaming} />
+      </div>
 
       {/* 日志查看器 */}
       <LogViewer logs={displayLogs.map((log) => (log.isError ? `❌ ${log.text}` : log.text))} />

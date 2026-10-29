@@ -10,7 +10,14 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-slice2*
 *.local
+
+# 沙箱内手工下载的 npm 包与本地缓存（Windows 上 npm 全局缓存被锁时的兜底产物）
+.npmcache
+.npmdl
+.stash-nm
+*.tgz
 
 # Editor directories and files
 .vscode/*
