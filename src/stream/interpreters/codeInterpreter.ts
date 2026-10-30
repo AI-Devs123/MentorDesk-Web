@@ -7,6 +7,8 @@
 import type { StreamFrame } from '../eventTypes';
 import { frameStr, frameNum } from '../eventTypes';
 import type { StreamStatus, UnifiedCodeSymbol } from '../../types/code-analysis';
+import type { SuspendData } from '../../types/agent';
+import { SUSPEND_STAGES } from './agentInterpreter';
 
 const SECURITY_KEYWORDS = /SecurityGuard|AccessDenied|访问控制熔断|越权/i;
 
@@ -27,12 +29,35 @@ export interface CodeInterpretation {
   setSecurityMessage?: string;
   setError?: string;
   freeze?: boolean;
+  /** 破坏性操作挂起（SUSPEND 帧）→ 交给面板渲染确认弹窗 */
+  suspend?: SuspendData;
 }
 
 export function interpretCodeFrame(frame: StreamFrame): CodeInterpretation {
   const stage = frameStr(frame, 'stage') ?? '';
   const content = frameStr(frame, 'content') ?? '';
+  const taskId = frameStr(frame, 'taskId') ?? '';
   const result: CodeInterpretation = {};
+
+  // 0) 破坏性操作挂起（与 agentInterpreter 同构，复用 SUSPEND_STAGES）
+  // 注：当前后端 CodeAnalysisStreamController 为阻塞式整批返回，并不下发 SUSPEND 帧；
+  // 此处接线是面向未来的「就绪态」——一旦后端 code 链路补发 SUSPEND，面板即可直接弹确认框。
+  if (SUSPEND_STAGES.includes(stage)) {
+    const suspend: SuspendData = {
+      execution_id: frameStr(frame, 'execution_id') ?? taskId ?? '',
+      token: frameStr(frame, 'token') ?? '',
+      promptHash: frameStr(frame, 'promptHash') ?? '',
+      operation_type: frameStr(frame, 'operation_type') ?? 'UNKNOWN',
+      risk_level: (frame.risk_level as SuspendData['risk_level']) ?? 'MEDIUM',
+      description: frameStr(frame, 'description') ?? content ?? '破坏性操作',
+      affected_files: (frame.affected_files as string[] | undefined) ?? [],
+      change_preview: frameStr(frame, 'change_preview') ?? undefined,
+      expires_at:
+        frameStr(frame, 'expires_at') ??
+        new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+    };
+    return { freeze: true, suspend };
+  }
 
   // 1) 安全熔断
   if (

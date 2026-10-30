@@ -133,3 +133,42 @@ export const sandboxDocAPI = {
     );
   },
 };
+
+/**
+ * RAG 语义切片取数响应（Slice 5 / 5-D）
+ *
+ * 后端端点 GET /api/v1/rag/chunk?docId=&index= 当前尚未实现（原 Week 7 部分），
+ * 此处先定义契约与前端调用。待后端补齐后，本调用即可返回真实切片正文。
+ */
+export interface RagChunkPayload {
+  /** 文档 ID */
+  docId: string;
+  /** 切片序号（从 0 起） */
+  chunkIndex: number;
+  /** 该文档切片总数 */
+  totalChunks: number;
+  /** 切片 Markdown 正文 */
+  content: string;
+  /** 是否因超过上限被截断 */
+  truncated: boolean;
+}
+
+/**
+ * RAG 语义切片 API 集合
+ *
+ * 与后端端点 GET /api/v1/rag/chunk 对接（当前后端未实现，前端为就绪态）。
+ * 网页策展把正文切片为 CuratedDocumentChunk 并送入向量库，但 SSE 帧仅回传 chunkCount，
+ * 正文需经本端点按需取用（避免在前端伪造切片内容）。
+ */
+export const ragAPI = {
+  /**
+   * 按文档 ID 与切片序号取回该切片正文
+   * @param docId 文档 ID
+   * @param index 切片序号（从 0 起）
+   */
+  getChunk: (docId: string, index: number): Promise<RagChunkPayload> => {
+    return apiClient.get<RagChunkPayload>(
+      `/api/v1/rag/chunk?docId=${encodeURIComponent(docId)}&index=${index}`
+    );
+  },
+};

@@ -1,10 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { SuspendData } from '../types/agent';
+import { parseUnifiedDiff, type DiffLineType } from '../markdown/diffParse';
 
 interface Props {
   data: SuspendData;
   onConfirm: () => Promise<void>;
   onReject: () => Promise<void>;
+}
+
+/** 行级着色：字符颜色 */
+function diffLineColor(type: DiffLineType): string {
+  switch (type) {
+    case 'add':
+      return '#4ade80';
+    case 'del':
+      return '#f87171';
+    case 'hunk':
+      return '#38bdf8';
+    case 'meta':
+      return '#a1a1aa';
+    default:
+      return '#d4d4d8';
+  }
+}
+
+/** 行级着色：背景底纹（仅增删行弱底色，便于扫读） */
+function diffLineBg(type: DiffLineType): string {
+  switch (type) {
+    case 'add':
+      return 'rgba(74,222,128,0.10)';
+    case 'del':
+      return 'rgba(248,113,113,0.10)';
+    default:
+      return 'transparent';
+  }
 }
 
 export const DestructiveConfirmModal: React.FC<Props> = ({ data, onConfirm, onReject }) => {
@@ -47,6 +76,12 @@ export const DestructiveConfirmModal: React.FC<Props> = ({ data, onConfirm, onRe
         return '#3b82f6';
     }
   };
+
+  // 解析后端 change_preview：真 unified diff 走行级着色，描述性文案降级为纯文本
+  const parsedDiff = useMemo(
+    () => parseUnifiedDiff(data.change_preview ?? ''),
+    [data.change_preview],
+  );
 
   return (
     <div
@@ -189,28 +224,100 @@ export const DestructiveConfirmModal: React.FC<Props> = ({ data, onConfirm, onRe
           >
             文件修改与差异审查 (Diff Preview):
           </div>
-          <pre
-            style={{
-              margin: 0,
-              padding: '12px',
-              backgroundColor: '#09090b',
-              border: '1px solid #27272a',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontFamily: 'monospace',
-              color: '#4ade80',
-              overflowX: 'auto',
-              maxHeight: '180px',
-              lineHeight: '1.5',
-            }}
-          >
-            {`--- a/${data.description}
-+++ /dev/null
-@@ -1,1 +0,0 @@
-- ${data.change_preview || data.description}
 
-[Security Alert]: 该操作不可逆，原文件将先行归档至 .trash/ 目录后执行硬删除。`}
-          </pre>
+          {/* 受影响文件清单（后端回传，可能为空或占位） */}
+          {data.affected_files && data.affected_files.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+              {data.affected_files.map((f, i) => (
+                <span
+                  key={`${f}-${i}`}
+                  style={{
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: '#18181b',
+                    border: '1px solid #3f3f46',
+                    color: '#fca5a5',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  {f}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {parsedDiff.isUnified ? (
+            <div
+              style={{
+                backgroundColor: '#09090b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                overflow: 'auto',
+                maxHeight: '220px',
+              }}
+            >
+              {parsedDiff.files.map((file, fi) => (
+                <div key={fi}>
+                  {file.filePath && (
+                    <div
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        color: '#38bdf8',
+                        backgroundColor: '#0f172a',
+                        borderBottom: '1px solid #1e293b',
+                        fontFamily: 'monospace',
+                        position: 'sticky',
+                        top: 0,
+                      }}
+                    >
+                      📄 {file.filePath}
+                    </div>
+                  )}
+                  {file.lines.map((line, li) => (
+                    <div
+                      key={li}
+                      style={{
+                        padding: '0 12px',
+                        fontSize: '12px',
+                        lineHeight: '1.5',
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre',
+                        color: diffLineColor(line.type),
+                        backgroundColor: diffLineBg(line.type),
+                      }}
+                    >
+                      {line.text || ' '}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <pre
+              style={{
+                margin: 0,
+                padding: '12px',
+                backgroundColor: '#09090b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                color: '#d4d4d8',
+                overflowX: 'auto',
+                maxHeight: '220px',
+                lineHeight: '1.5',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {parsedDiff.raw || data.description}
+            </pre>
+          )}
+
+          <div style={{ marginTop: '6px', fontSize: '11px', color: '#71717a' }}>
+            [Security Alert]: 该操作不可逆，原文件将先行归档至 .trash/ 目录后执行硬删除。
+          </div>
         </div>
 
         {/* 控制按钮区 */}

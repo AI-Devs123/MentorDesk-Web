@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   calcNoiseReduction,
   formatBytes,
   type StagedPayload,
   type WebCurateResultData,
 } from '../types/web-curate';
+import { CurateChunkViewer } from './CurateChunkViewer';
 
 interface WebCurateResultCardProps {
   /** COMPLETED 帧携带的完整入库结果 */
@@ -32,6 +33,8 @@ export const WebCurateResultCard: React.FC<WebCurateResultCardProps> = ({
   const savedPath = data.sandboxSavedPath || staged?.sandboxSavedPath || '';
   const fileSize = data.fileSizeBytes || staged?.fileSizeBytes || 0;
   const chunkCount = data.chunkCount || staged?.chunkCount || 0;
+  // 当前打开查看的切片序号（Slice 5 / 5-D：点击编号取正文）
+  const [activeChunk, setActiveChunk] = useState<number | null>(null);
 
   return (
     <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg text-slate-100 font-sans space-y-4 my-3 transition-all duration-300">
@@ -112,13 +115,15 @@ export const WebCurateResultCard: React.FC<WebCurateResultCardProps> = ({
           </div>
           <div className="flex flex-wrap gap-1">
             {Array.from({ length: Math.min(chunkCount, 64) }).map((_, idx) => (
-              <span
+              <button
                 key={idx}
-                className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300 hover:border-cyan-700 hover:text-cyan-300 transition-colors"
-                title={`Chunk #${idx}`}
+                type="button"
+                onClick={() => setActiveChunk(idx)}
+                className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300 hover:border-cyan-600 hover:text-cyan-300 hover:bg-cyan-950/40 transition-colors"
+                title={`点击查看 Chunk #${idx} 正文`}
               >
                 {idx}
-              </span>
+              </button>
             ))}
             {chunkCount > 64 && (
               <span className="text-[11px] text-slate-500 self-center ml-1">
@@ -151,6 +156,16 @@ export const WebCurateResultCard: React.FC<WebCurateResultCardProps> = ({
         <div className="text-[11px] text-slate-500 font-mono break-all">
           canonical: {data.canonicalUrl}
         </div>
+      )}
+
+      {/* 切片正文查看器（Slice 5 / 5-D：点击上方编号取正文） */}
+      {activeChunk !== null && (
+        <CurateChunkViewer
+          docId={data.docId}
+          index={activeChunk}
+          totalChunks={chunkCount}
+          onClose={() => setActiveChunk(null)}
+        />
       )}
     </div>
   );

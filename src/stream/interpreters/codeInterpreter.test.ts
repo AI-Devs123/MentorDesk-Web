@@ -40,4 +40,32 @@ describe('interpretCodeFrame', () => {
     const r = interpretCodeFrame({ stage: 'FAILED', content: 'boom' });
     expect(r.setStatus).toBe('error');
   });
+
+  it('SUSPEND_FOR_CONFIRMATION → 解析为 suspend（5-B 就绪态）', () => {
+    const r = interpretCodeFrame({
+      stage: 'SUSPEND_FOR_CONFIRMATION',
+      taskId: 'T1',
+      execution_id: 'exec-1',
+      token: 'tok-abc',
+      operation_type: 'FILE_DELETE',
+      risk_level: 'HIGH',
+      description: '将删除文件: /tmp/old.txt',
+      affected_files: ['/tmp/old.txt'],
+      change_preview: '将删除文件: /tmp/old.txt',
+      expires_at: '2026-10-30T12:00:00Z',
+    });
+    expect(r.freeze).toBe(true);
+    expect(r.suspend?.execution_id).toBe('exec-1');
+    expect(r.suspend?.token).toBe('tok-abc');
+    expect(r.suspend?.operation_type).toBe('FILE_DELETE');
+    expect(r.suspend?.risk_level).toBe('HIGH');
+    expect(r.suspend?.affected_files).toEqual(['/tmp/old.txt']);
+    expect(r.suspend?.change_preview).toBe('将删除文件: /tmp/old.txt');
+  });
+
+  it('LAYER3_CONFIRMATION_REQUIRED 同样识别为 suspend', () => {
+    const r = interpretCodeFrame({ stage: 'LAYER3_CONFIRMATION_REQUIRED', content: 'x' });
+    expect(r.suspend).toBeDefined();
+    expect(r.freeze).toBe(true);
+  });
 });

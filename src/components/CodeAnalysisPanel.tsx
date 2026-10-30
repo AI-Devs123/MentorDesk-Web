@@ -3,7 +3,10 @@ import { useNexusStream } from '../hooks/useNexusStream';
 import { interpretCodeFrame, type ScannedFileEntry } from '../stream/interpreters/codeInterpreter';
 import type { StreamFrame } from '../stream/eventTypes';
 import type { StreamStatus, UnifiedCodeSymbol } from '../types/code-analysis';
+import type { SuspendData } from '../types/agent';
 import { SecurityViolationBanner } from './SecurityViolationBanner';
+import { DestructiveConfirmModal } from './DestructiveConfirmModal';
+import { resumeTask, abortTask } from '../utils/destructiveConfirm';
 import { CodeHighlight } from './CodeHighlight';
 
 /** 默认沙箱项目名（与后端 /data/nexusmind/sandbox 下的子目录一致） */
@@ -69,6 +72,7 @@ export const CodeAnalysisPanel: React.FC = () => {
   const [securityMessage, setSecurityMessage] = useState('');
   const [error, setError] = useState('');
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [suspend, setSuspend] = useState<SuspendData | null>(null);
 
   const haltRef = useRef(false);
   const startAtRef = useRef(0);
@@ -101,6 +105,8 @@ export const CodeAnalysisPanel: React.FC = () => {
       }
       if (r.setSecurityMessage) setSecurityMessage(r.setSecurityMessage);
       if (r.setError) setError(r.setError);
+      // 破坏性操作挂起：冻结流并弹出确认框（后端 code 链路补发 SUSPEND 后生效）
+      if (r.suspend) setSuspend(r.suspend);
     });
     return off;
   }, [subscribe]);
@@ -197,6 +203,22 @@ export const CodeAnalysisPanel: React.FC = () => {
     setSecurityMessage('');
     setError('');
     setElapsedMs(0);
+    setSuspend(null);
+  };
+
+  // 破坏性操作确认流（与 DashboardPage 同源端点；当前后端 code 链路尚未下发 SUSPEND，故为就绪态）
+  const handleSuspendConfirm = async () => {
+    if (!suspend) return;
+    const res = await resumeTask(suspend);
+    setSuspend(null);
+    setSecurityMessage(res.message ?? '已核准破坏性操作');
+  };
+
+  const handleSuspendReject = async () => {
+    if (!suspend) return;
+    const res = await abortTask(suspend);
+    setSuspend(null);
+    setError(res.message ?? '已拒绝并回滚破坏性操作');
   };
 
   return (
@@ -419,6 +441,15 @@ export const CodeAnalysisPanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 破坏性操作确认弹窗（5-B：后端 code 链路补发 SUSPEND 帧后生效） */}
+      {suspend && (
+        <DestructiveConfirmModal
+          data={suspend}
+          onConfirm={handleSuspendConfirm}
+          onReject={handleSuspendReject}
+        />
+      )}
     </div>
   );
 };

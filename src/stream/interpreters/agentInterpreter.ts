@@ -9,7 +9,7 @@ import type { FrameInterpreter, StreamFrame } from '../eventTypes';
 import { frameStr } from '../eventTypes';
 import type { SuspendData } from '../../types/agent';
 
-const SUSPEND_STAGES = [
+export const SUSPEND_STAGES = [
   'SUSPEND_FOR_CONFIRMATION',
   'LAYERS_CONFIRMATION_REQUIRED',
   'LAYER3_CONFIRMATION_REQUIRED',
