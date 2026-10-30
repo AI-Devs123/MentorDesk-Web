@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import type { TutorReflectionPrompt } from '../types/cognitive';
 import { StreamingText } from './StreamingText';
 
@@ -29,14 +29,12 @@ const RELATION_COLOR: Record<string, string> = {
  * 待后端补齐回传接口后再切换为真实提交。
  */
 export const TutorReflectBlock: React.FC<Props> = ({ prompt }) => {
-  const [reflection, setReflection] = useState('');
+  // 切换 prompt 时由调用方以 key={prompt.promptId} 重挂载本组件，从而用最新草稿初始化，
+  // 避免在 effect 内同步 setState（react-hooks/set-state-in-effect）
+  const [reflection, setReflection] = useState(
+    () => localStorage.getItem(STORAGE_PREFIX + prompt.promptId) ?? '',
+  );
   const [submitted, setSubmitted] = useState(false);
-
-  // 切换 prompt 时恢复对应草稿
-  useEffect(() => {
-    setReflection(localStorage.getItem(STORAGE_PREFIX + prompt.promptId) ?? '');
-    setSubmitted(false);
-  }, [prompt.promptId]);
 
   const handleSubmit = () => {
     if (!reflection.trim()) return;

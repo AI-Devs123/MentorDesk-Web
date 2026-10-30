@@ -45,9 +45,16 @@ export const SandboxMarkdownViewer: React.FC<Props> = ({ path, mode = 'button' }
     }
   }, [path]);
 
-  // auto 模式：挂载时拉一次
+  // auto 模式：挂载时拉一次。延迟到微任务，避免 effect 内同步 setState（react-hooks/set-state-in-effect）
   useEffect(() => {
-    if (mode === 'auto') void load();
+    if (mode !== 'auto') return;
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) void load();
+    });
+    return () => {
+      active = false;
+    };
     // 仅挂载时执行一次；path 变化由调用方通过 key 重新挂载控制
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

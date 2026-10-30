@@ -78,7 +78,13 @@ export const JournalSandboxPanel: React.FC = () => {
         return;
       }
 
-      const { entry, physicalPath, processingStats } = response.data;
+      const data = response.data;
+      if (!data) {
+        setError(response.message || '服务端未返回数据');
+        return;
+      }
+
+      const { entry, physicalPath, processingStats } = data;
 
       // 初始化数据（当前后端为同步返回完整结果，无 SSE 增量通道）
       setParsedEntry(entry);
@@ -86,8 +92,8 @@ export const JournalSandboxPanel: React.FC = () => {
       if (processingStats) {
         setStats(processingStats);
       }
-    } catch (err: any) {
-      setError(err.message || '网络通信异常');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '网络通信异常');
     } finally {
       setLoading(false);
     }

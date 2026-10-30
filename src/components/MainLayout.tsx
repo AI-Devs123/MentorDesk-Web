@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Sidebar, loadCollapsed, COLLAPSED_KEY } from './Sidebar';
+import { Sidebar } from './Sidebar';
 import { UserBar } from './UserBar';
 import { findNavItem } from '../config/navigation';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
+import { loadCollapsed, COLLAPSED_KEY } from '../config/sidebarState';
 
 /**
  * 主布局 —— 登录后所有业务页面的外壳

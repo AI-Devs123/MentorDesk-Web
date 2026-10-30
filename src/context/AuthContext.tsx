@@ -1,6 +1,7 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { authStorage } from '../utils/auth';
 import type { UserInfo } from '../utils/auth';
+import { AuthContext } from './authContextDef';
 
 /**
  * 全局认证上下文
@@ -10,16 +11,14 @@ import type { UserInfo } from '../utils/auth';
  * LoginPage 登录成功后 RequireAuth / MainLayout 立即可见。
  */
 
-interface AuthContextValue {
-  currentUser: UserInfo | null;
-  isLoggedIn: boolean;
-  isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
-  getToken: () => string | null;
+/** 登录接口返回结构 */
+interface AuthLoginResponse {
+  token?: string;
+  expires_in?: number;
+  username?: string;
+  role?: string;
+  message?: string;
 }
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
@@ -68,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     const contentType = response.headers.get('content-type');
-    let data: any;
+    let data: AuthLoginResponse;
     try {
       if (contentType?.includes('application/json')) {
         data = await response.json();
@@ -76,18 +75,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const text = await response.text();
         throw new Error(`服务器返回错误 (${response.status}): ${text.slice(0, 100)}`);
       }
-    } catch (parseErr: any) {
-      if (parseErr.message?.startsWith('服务器返回错误')) throw parseErr;
-      throw new Error(`响应解析失败: ${parseErr.message}`);
+    } catch (parseErr: unknown) {
+      if (parseErr instanceof Error && parseErr.message.startsWith('服务器返回错误')) {
+        throw parseErr;
+      }
+      const reason = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      throw new Error(`响应解析失败: ${reason}`, { cause: parseErr });
     }
 
     if (!response.ok) {
       throw new Error(data.message || '登录失败');
     }
 
+    if (!data.token || data.expires_in == null) {
+      throw new Error(data.message || '登录响应缺少令牌信息');
+    }
     authStorage.setToken(data.token, data.expires_in, {
-      username: data.username,
-      role: data.role,
+      username: data.username ?? '',
+      role: data.role ?? '',
     });
 
     setCurrentUser(authStorage.getUser());
@@ -108,14 +113,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
-
-/**
- * 使用全局认证状态（必须在 AuthProvider 内使用）
- */
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth 必须在 <AuthProvider> 内使用');
-  }
-  return ctx;
-}

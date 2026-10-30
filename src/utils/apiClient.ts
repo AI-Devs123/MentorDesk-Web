@@ -1,4 +1,5 @@
 import { authStorage } from './auth';
+import type { JournalReviewResponse } from '../types/cognitive';
 
 export interface RequestOptions extends RequestInit {
   baseURL?: string;
@@ -91,7 +92,7 @@ export const journalAPI = {
    * @returns 结构化抽取结果和物理落盘信息
    */
   submitForReview: (rawContent: string) => {
-    return apiClient.post<any>(
+    return apiClient.post<JournalReviewResponse>(
       '/api/v1/journal/review',
       { rawContent }
     );

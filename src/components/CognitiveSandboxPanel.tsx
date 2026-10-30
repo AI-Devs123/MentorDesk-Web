@@ -201,7 +201,7 @@ export const CognitiveSandboxPanel: React.FC = () => {
       {tutorPrompt && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-300">Tutor 启发式提问</h3>
-          <TutorReflectBlock prompt={tutorPrompt} />
+          <TutorReflectBlock key={tutorPrompt.promptId} prompt={tutorPrompt} />
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 /**
  * 登录页
@@ -26,8 +26,8 @@ export const LoginPage: React.FC = () => {
       // 跳回守卫记录的来源页（无则回控制台）
       const from = window.history.state?.usr?.from as string | undefined;
       navigate(from || '/', { replace: true });
-    } catch (err: any) {
-      setErrorMsg(err.message || '登录失败');
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : '登录失败');
     } finally {
       setLoading(false);
     }

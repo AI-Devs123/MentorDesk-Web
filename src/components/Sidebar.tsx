@@ -2,13 +2,6 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { NAV_ITEMS } from '../config/navigation';
 
-/** 折叠状态持久化 key */
-const COLLAPSED_KEY = 'nexusmind_sidebar_collapsed';
-
-function loadCollapsed(): boolean {
-  return localStorage.getItem(COLLAPSED_KEY) === 'true';
-}
-
 interface Props {
   collapsed: boolean;
   onToggle: () => void;
@@ -122,5 +115,3 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
     </aside>
   );
 };
-
-export { loadCollapsed, COLLAPSED_KEY };

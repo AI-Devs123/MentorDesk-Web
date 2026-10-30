@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { useNexusStream } from '../hooks/useNexusStream';
 import { agentInterpreter } from '../stream/interpreters/agentInterpreter';
 import { authStorage } from '../utils/auth';
