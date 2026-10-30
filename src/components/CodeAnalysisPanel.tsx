@@ -4,6 +4,7 @@ import { interpretCodeFrame, type ScannedFileEntry } from '../stream/interpreter
 import type { StreamFrame } from '../stream/eventTypes';
 import type { StreamStatus, UnifiedCodeSymbol } from '../types/code-analysis';
 import { SecurityViolationBanner } from './SecurityViolationBanner';
+import { CodeHighlight } from './CodeHighlight';
 
 /** 默认沙箱项目名（与后端 /data/nexusmind/sandbox 下的子目录一致） */
 const DEFAULT_PROJECT = 'nexusmind-agent-workers';
@@ -398,9 +399,12 @@ export const CodeAnalysisPanel: React.FC = () => {
                         >
                           {s.kind}
                         </span>
-                        <span className="text-[11px] text-slate-200 font-mono break-all">
-                          {s.signature || s.name}
-                        </span>
+                        <CodeHighlight
+                          code={s.signature || s.name}
+                          lang="java"
+                          fontSize={11}
+                          className="font-mono break-all"
+                        />
                       </li>
                     );
                   })}

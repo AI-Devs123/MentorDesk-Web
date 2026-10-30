@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { TutorReflectionPrompt } from '../types/cognitive';
+import { StreamingText } from './StreamingText';
 
 interface Props {
   /** 后端 tutor_prompt 数据帧解析出的反思提示 */
@@ -8,6 +9,13 @@ interface Props {
 
 /** 本地反思暂存前缀（后端反思回传接口未实现前，先本地记录） */
 const STORAGE_PREFIX = 'nexusmind_reflection_';
+
+/** 关联线索关系类型配色（contrasts / reinforces / extends） */
+const RELATION_COLOR: Record<string, string> = {
+  contradicts: 'text-rose-300 border border-rose-700/50 bg-rose-900/30',
+  reinforces: 'text-emerald-300 border border-emerald-700/50 bg-emerald-900/30',
+  extends: 'text-sky-300 border border-sky-700/50 bg-sky-900/30',
+};
 
 /**
  * Tutor 启发式提问交互卡片（切片5）
@@ -61,11 +69,13 @@ export const TutorReflectBlock: React.FC<Props> = ({ prompt }) => {
         <div className="text-xs font-semibold text-violet-300 uppercase tracking-wider mb-1">
           核心矛盾
         </div>
-        <p className="text-sm text-slate-200 leading-relaxed">{prompt.coreConflict}</p>
+        <p className="text-sm text-slate-200 leading-relaxed">
+          <StreamingText as="text" text={prompt.coreConflict} />
+        </p>
         {prompt.contextSummary && (
           <p className="text-xs text-slate-400 mt-2 leading-relaxed">
             <span className="text-violet-400/80">背景: </span>
-            {prompt.contextSummary}
+            <StreamingText as="text" text={prompt.contextSummary} />
           </p>
         )}
       </div>
@@ -76,18 +86,24 @@ export const TutorReflectBlock: React.FC<Props> = ({ prompt }) => {
           辨析思考题
         </div>
         {questions.map((q) => (
-          <div key={q.index} className="bg-slate-950/60 border border-slate-800 rounded-lg p-3">
-            <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
-              <span className="font-mono text-violet-400">Q{q.index + 1}</span>
-              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                {q.conceptA}
-              </span>
-              <span className="text-slate-500">vs</span>
-              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                {q.conceptB}
-              </span>
+          <div key={q.index} className="bg-slate-950/60 border border-slate-800 rounded-lg p-3 space-y-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-mono text-violet-400 shrink-0">Q{q.index + 1}</span>
+              <div className="flex-1 grid grid-cols-[1fr_auto_1fr] gap-2 items-stretch">
+                <div className="bg-slate-900/70 border border-slate-700 rounded p-2">
+                  <div className="text-[10px] text-slate-500 mb-0.5">概念 A</div>
+                  <div className="font-mono text-violet-300 text-xs break-all">{q.conceptA}</div>
+                </div>
+                <div className="flex items-center text-slate-500 text-sm">↔</div>
+                <div className="bg-slate-900/70 border border-slate-700 rounded p-2">
+                  <div className="text-[10px] text-slate-500 mb-0.5">概念 B</div>
+                  <div className="font-mono text-violet-300 text-xs break-all">{q.conceptB}</div>
+                </div>
+              </div>
             </div>
-            <p className="text-sm text-slate-200 leading-relaxed">{q.questionText}</p>
+            <p className="text-sm text-slate-200 leading-relaxed">
+              <StreamingText as="text" text={q.questionText} />
+            </p>
           </div>
         ))}
       </div>
@@ -105,7 +121,12 @@ export const TutorReflectBlock: React.FC<Props> = ({ prompt }) => {
                 className="bg-slate-950/60 border border-slate-800 rounded p-2.5 text-xs"
               >
                 <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 rounded bg-violet-900/40 text-violet-300 font-mono">
+                  <span
+                    className={`px-1.5 py-0.5 rounded font-mono ${
+                      RELATION_COLOR[link.relationType] ??
+                      'text-violet-300 border border-violet-900/50 bg-violet-900/40'
+                    }`}
+                  >
                     {link.relationType}
                   </span>
                   <span className="text-slate-500 font-mono">{link.historicalEntryId}</span>

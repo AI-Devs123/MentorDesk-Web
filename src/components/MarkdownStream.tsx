@@ -17,19 +17,10 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markd
 import remarkGfm from 'remark-gfm';
 
 import { useTypewriter } from '../hooks/useTypewriter';
-import { highlightCode, type TokenKind } from '../markdown/highlight';
+import { highlightCode } from '../markdown/highlight';
+import { TOKEN_COLOR, FONT_MONO } from '../markdown/highlightColors';
 
-/** 高亮 token 配色（深色面板，沿用 One Dark 风格） */
-const TOKEN_COLOR: Record<TokenKind, string> = {
-  plain: '#d6deeb',
-  keyword: '#c792ea',
-  string: '#a5d6a7',
-  comment: '#6b7280',
-  number: '#f78c6c',
-};
-
-/** 行内/块级代码与标题等元素的统一排版常量 */
-const FONT_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+// TOKEN_COLOR / FONT_MONO 已迁移到 markdown/highlightColors，供本文件与 CodeHighlight 复用
 
 interface Props {
   /** 待渲染的完整文本（流式过程中会是累积的中间态） */
