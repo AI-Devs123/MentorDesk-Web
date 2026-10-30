@@ -97,3 +97,38 @@ export const journalAPI = {
     );
   },
 };
+
+/**
+ * 沙箱文档读取响应（Slice 3 新增端点 GET /api/v1/sandbox/doc）
+ * 与后端 SandboxDocController 一一对应。
+ */
+export interface SandboxDocPayload {
+  /** 相对沙箱根的路径 */
+  path: string;
+  /** 落盘文件真实字节数 */
+  sizeBytes: number;
+  /** 是否因超过字符上限被截断 */
+  truncated: boolean;
+  /** Markdown 正文 */
+  content: string;
+}
+
+/**
+ * 沙箱文档 API 集合
+ * 与后端端点: GET /api/v1/sandbox/doc 对接
+ *
+ * 网页策展把正文提纯为 Markdown 落盘到沙箱（inbox/web/*.md），
+ * 但 STAGED / COMPLETED 帧只回传路径与字节数，正文需经本端点读取。
+ * 后端侧受 PathSandboxValidator 约束（防目录穿越）与 RBAC 角色白名单限制。
+ */
+export const sandboxDocAPI = {
+  /**
+   * 读取沙箱内已落盘的 Markdown 正文
+   * @param relativePath 相对沙箱根路径，如 inbox/web/20261027_xxx.md
+   */
+  readMarkdown: (relativePath: string): Promise<SandboxDocPayload> => {
+    return apiClient.get<SandboxDocPayload>(
+      `/api/v1/sandbox/doc?path=${encodeURIComponent(relativePath)}`
+    );
+  },
+};

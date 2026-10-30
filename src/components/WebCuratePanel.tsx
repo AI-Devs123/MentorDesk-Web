@@ -4,6 +4,7 @@ import { interpretCurateFrame } from '../stream/interpreters/curateInterpreter';
 import type { StreamFrame } from '../stream/eventTypes';
 import { SecurityViolationBanner } from './SecurityViolationBanner';
 import { WebCurateResultCard } from './WebCurateResultCard';
+import { SandboxMarkdownViewer } from './SandboxMarkdownViewer';
 import { formatBytes } from '../types/web-curate';
 import type {
   CurateStreamStatus,
@@ -331,6 +332,16 @@ export const WebCuratePanel: React.FC = () => {
 
       {/* 结果卡片 */}
       {result && <WebCurateResultCard data={result} staged={staged} />}
+
+      {/* 沙箱 Markdown 正文查看：STAGED 即已落盘，可提前查看（Phase 4 · Slice 3） */}
+      {(staged?.sandboxSavedPath || result?.sandboxSavedPath) && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-300">落盘正文</h3>
+          <SandboxMarkdownViewer
+            path={staged?.sandboxSavedPath || result?.sandboxSavedPath || ''}
+          />
+        </div>
+      )}
     </div>
   );
 };
